@@ -283,7 +283,7 @@ void p_query() {
 }
 
 void p_sync() {
-    
+
 }
 
 int main(int argc, char** argv) {
@@ -334,6 +334,7 @@ int main(int argc, char** argv) {
     int stdin_no = fileno(stdin);
     stdin_no = isatty(stdin_no);
 
+    // Not too sure what these structures are used for 
     char temp_arr[4104];
     ushort** temp_arr_ref;
 

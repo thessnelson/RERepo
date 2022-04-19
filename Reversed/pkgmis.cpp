@@ -278,6 +278,14 @@ void needs_root() {
     exit(1);
 }
 
+void p_query() {
+
+}
+
+void p_sync() {
+    
+}
+
 int main(int argc, char** argv) {
     // Set up signals
     struct sigaction new_action, old_action; 

@@ -709,6 +709,8 @@ void display(pmpkg_t* pkg_data) {
     }
 }
 
+
+
 void p_query(alpm_list_t* pm_targets) {
     alpm_list_t* syncdb;
     size_t db_count;

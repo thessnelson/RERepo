@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <time.h>
 
 #include <sys/utsname.h>
 #include <getopt.h>
@@ -278,11 +279,78 @@ void needs_root() {
     exit(1);
 }
 
-void p_query() {
+void p_query(alpm_list_t* pm_targets) {
+    alpm_list_t* syncdb;
+    size_t db_count;
 
+    pmpkg_t* pkg_data;
+    pmdb_t* localdb;
+
+    if (*(short*)(config + 0x50) == 0) {
+        if (*(short*)(config + 0x100) == 0) {
+            if (*(short*)(config + 0x46) == 0 || ((syncdb = alpm_option_get_syncdbs()) != 0 && (db_count = alpm_list_count(syncdb)) != 0)) {
+                localdb = alpm_option_get_localdb();
+
+                if (pm_targets == 0) {
+                    if (*(short*)(config + 0x40) == 0 && (*(short*)(config + 0x4e) == 0)) {
+                        for(alpm_list_t* i = alpm_db_getpkgcache(localdb); i != 0; i = alpm_list_next(i)) {
+                            pkg_data = alpm_list_getdata(i);
+
+                            if (filter() != 0) {
+                                display(pkg_data);
+                            }
+
+                            struct timespec ts;
+                            ts.tv_sec = 0;
+                            ts.tv_nsec = 200000000;
+
+                            nanosleep(&ts, NULL);
+                        }
+                    } else {
+                        pm_printf(gettext("Error: No targets were specified. Use the -h flag for help.\n"));
+                    }
+                } else {
+                    alpm_list_t* current = pm_targets;
+                    alpm_list_t* temp;
+
+                    if (*(short*)(config + 0x4e) == 0) {
+                        while ((temp = current) != 0) {
+                            char* pkg_name alpm_list_getdata(temp);
+
+                            if (*(short*)(config + 0x40) == 0) {
+                                pkg_data = alpm_db_get_pkg(local_db, pkg_name);
+                            } else {
+                                alpm_pkg_load(pkg_name, 1, &pkg_data);
+                            }
+
+                            if (pkg_data == 0) {
+                                pm_printf(gettext("Error: The package \"%s\" not found.\n"));
+                            } else {
+                                if (filter() != 0) {
+                                    display(pkg_data);
+                                }
+
+                                if (*(short*)(config + 0x40) != 0) {
+                                    pkg_data = NULL;
+                                }
+                            }
+
+                            current = alpm_list_next(temp);
+                        }
+                    } else {
+                        query_fileowner();
+                    }
+                }
+            }
+        } else {
+            query_group();
+        }
+    } else {
+        query_search();
+    }
 }
 
-void p_sync() {
+void p_sync(alpm_list_t* pm_targets) {
 
 }
 
@@ -334,7 +402,6 @@ int main(int argc, char** argv) {
     int stdin_no = fileno(stdin);
     stdin_no = isatty(stdin_no);
 
-    // Not too sure what these structures are used for 
     char temp_arr[4104];
     ushort** temp_arr_ref;
 
@@ -391,9 +458,9 @@ int main(int argc, char** argv) {
     needs_root();
 
     if (*config == 4) {
-        p_query();
+        p_query(pm_targets);
     } else if (*config == 5) {
-        p_sync();
+        p_sync(pm_targets);
     } else {
         pm_printf(gettext("Error: No operation was specified. Use the -h flag for help.\n"));
         exit(1);

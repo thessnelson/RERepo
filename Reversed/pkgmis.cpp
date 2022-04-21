@@ -874,7 +874,68 @@ void query_group(alpm_list_t* pm_targets) {
 }
 
 void query_search(alpm_list_t* pm_targets) {
+    pmdb_t* localdb = alpm_option_get_localdb();
+    alpm_list_t* pkg_cache;
 
+    if (pm_targets == 0) {
+        pkg_cache = alpm_db_get_pkgcache(localdb);
+    } else {
+        pkg_cache = alpm_db_search(localdb,pm_targets);
+    }
+
+    if (pkg_cache != 0) {
+        for (alpm_list_t* i = pkg_cache; i != 0; i = alpm_list_next(i)) {
+            localdb = alpm_list_getdata(i);
+
+            char* pkg_version;
+            size_t pkg_size;
+
+            if (*(short *)(config + 2) == 0) {
+                pkg_version = alpm_pkg_get_version(localdb);
+                char* pkg_name = alpm_pkg_get_name(localdb);
+
+                printf("local/%s %s", pkg_name, pkg_version);
+            } else {
+                pkg_version = alpm_pkg_get_name(localdb);
+
+                printf("%s",pkg_version);
+            }
+
+            if ((*(short *)(config + 2) == 0) && (*(short *)(config + 0x76) != 0)) {
+                pkg_size = alpm_pkg_get_size(localdb);
+
+                printf((char *)((double)pkg_size / 1048576.0)," [%.2f MB]");
+            }
+
+            if (*(short *)(config + 2) == 0) {
+                alpm_list_t* pkg_groups = alpm_pkg_get_groups(localdb);
+
+                if (pkg_groups != 0) {
+                    printf(" (");
+
+                    for (; pkg_groups != 0; pkg_groups = alpm_list_next(pkg_groups)) {
+                        pkg_version = alpm_list_getdata(pkg_groups);
+                        printf("%s", pkg_version);
+                        pkg_size = alpm_list_next(pkg_groups);
+
+                        if (pkg_size != 0) {
+                            putchar(' ');
+                        }
+                    }
+
+                    putchar(')');
+                }
+
+                printf("\n    ");
+                indentprint(alpm_pkg_get_desc(localdb), 4);
+            }
+
+            putchar(10);
+            sleep(3);
+        }
+    }
+    
+    return;
 }
 
 void p_query(alpm_list_t* pm_targets) {

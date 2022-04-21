@@ -709,7 +709,93 @@ void display(pmpkg_t* pkg_data) {
     }
 }
 
+void query_fileowner(alpm_list_t* pm_targets) {
+    size_t root_path_len;
+    long pm_targets;
+    char *path_buf;
+    struct stat sb;
+    char buf [4104];
+    bool path_found;
 
+    if (pm_targets != 0) {
+        char* root = (char *)alpm_option_get_root();
+        strncpy(buf, root, 0xfff);
+        size_t root_len = strlen(buf);
+        pmdb_t* local_db = alpm_option_get_localdb();
+
+        for (alpm_list_t* i = pm_targets; i != 0; i = alpm_list_next(i)) {
+            path_found = false;
+            root = (char *)alpm_list_getdata(i);
+            root = strdup(root);
+            int f = lstat(root, &sb);
+
+            if (f == -1) {
+                root = strchr(root, 0x2f);
+
+                if (root == NULL && search_path(local_db, sb) == -1) {
+                    int* error = __errno_location();
+                    strerror(*error);
+                    pm_fprintf(gettext("Error: Failed to find \'%s\' in PATH: %s\n"));
+                }
+            } else if (f == -1 && search_path(local_db, sb) != -1 || f != -1) {
+                if ((sb.st_mode & 0xf000) != 0x4000) {
+                    if (*mdirname(mbasename(root)) == '\0') {
+                        path_buf = (char *)0x0;
+                    } else {
+                        path_buf = resolve_path(root);
+
+                        if (path_buf == NULL) {
+                            error = __errno_location();
+                            strerror(*error);
+                            pm_fprintf(gettext("Error: Cannot determine the real path for \'%s\': %s\n"));
+                            return;
+                        }
+                    }
+
+                    alpm_list_t* pkg_cache = alpm_db_get_pkgcache(local_db);
+
+                    while ((pkg_cache != 0 && (!path_found))) {
+                        pmpkg_t* pkg_cache_data = alpm_list_getdata(pkg_cache);
+                        alpm_list_t* pkg_files = alpm_pkg_get_files(pkg_cache_data);
+
+                        while ((pkg_files != 0 && (!path_found))) {
+                            root = (char *)alpm_list_getdata(pkg_files);
+                            mbasename(root);
+
+                            f = strcmp(__s1,__s2);
+
+                            if (f == 0) {
+                                if (path_buf == NULL) {
+                                    print_query_fileowner(pkg_cache_data);
+                                    path_found = true;
+                                } else {
+                                    root_path_len = strlen(root);
+
+                                    if (0xfffU - ((long)(buf + root_len) - (long)buf) < root_path_len) {
+                                        pm_fprintf(gettext("Error: The following path is too long: %s%s\n"));
+                                    }
+
+                                    strcpy(buf + root_len, root);
+                                    mdirname(buf);
+                                    resolve_path(buf);
+
+                                    if ((buf != NULL) && (f = strcmp(buf, path_buf)) == 0) {
+                                        print_query_fileowner(pkg_cache_data);
+                                        path_found = true;
+                                    }
+                                }
+                            }
+
+                            pkg_files = alpm_list_next(pkg_files);
+                        }
+
+                        pkg_cache = alpm_list_next(pkg_cache);
+                    }
+                }
+            }
+        }
+    }
+}
 
 void p_query(alpm_list_t* pm_targets) {
     alpm_list_t* syncdb;
@@ -770,15 +856,15 @@ void p_query(alpm_list_t* pm_targets) {
                             current = alpm_list_next(temp);
                         }
                     } else {
-                        query_fileowner();
+                        query_fileowner(pm_targets);
                     }
                 }
             }
         } else {
-            query_group();
+            query_group(pm_targets);
         }
     } else {
-        query_search();
+        query_search(pm_targets);
     }
 }
 

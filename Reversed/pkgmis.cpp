@@ -709,6 +709,44 @@ void display(pmpkg_t* pkg_data) {
     }
 }
 
+char* mbasename(char* input) {
+    return strrchr(input, '/');
+}
+
+char* mdirname(char* input) {
+    char* output;
+
+    if ((input == NULL) {
+        strdup(".");
+    } else {
+        output = strdup(input);
+        output = strrchr(output,0x2f);
+        
+        if (output == NULL) {
+            output = strdup(".");
+        } else {
+            *output = '\0';
+        }
+    }
+    return output;
+}
+
+char* resolve_path(char* input) {
+    char* __resolved = (char *)calloc(0x1001,1);
+
+    if (__resolved != (char *)0x0) {
+        realpath(in_RDI,__resolved);
+    }
+
+    return __resolved;
+}
+
+void print_query_fileowner(pmpkg_t* pkg_data) {
+    if (*(short*)(config + 2) != 0) {
+        puts((char*)alpm_pkg_get_name(pkg_data));
+    }
+}
+
 void query_fileowner(alpm_list_t* pm_targets) {
     size_t root_path_len;
     long pm_targets;

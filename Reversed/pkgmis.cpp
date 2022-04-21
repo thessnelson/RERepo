@@ -62,7 +62,7 @@ void version() {
     puts(" |_|  |_|_|___/_| |_| |_|\\__,_|_| |_|\\__,_|\\__, |\\___ |_|   ");
     puts("                                           |___/           ");
     return;
-}string_length(str2)
+}
 
 char* mbasename(char* input) {
     return strrchr(input, '/');
@@ -934,7 +934,7 @@ void query_search(alpm_list_t* pm_targets) {
             sleep(3);
         }
     }
-    
+
     return;
 }
 
@@ -1010,7 +1010,47 @@ void p_query(alpm_list_t* pm_targets) {
 }
 
 void p_sync(alpm_list_t* pm_targets) {
+    if (*(short *)(config + 0x58) == 0) {
+        alpm_list_t* syncdb = alpm_option_get_syncdbs();
 
+        if ((syncdb == 0) || (syncdb = alpm_list_count(syncdb))== 0) {
+            pm_printf(gettext("Error: No package repositories configured.\n"));
+        } else {
+            if (*(short *)(config + 0x5e) != 0) {
+                printf((char *)gettext("Refreshing package databases... please wait...\n"));
+
+                if (sync_synctree(syncdb, *(short*)(config + 0x5e)) == 0) {
+                    return;
+                }
+            }
+
+            if (*(short *)(config + 0x60) == 0) {
+                if (*(short *)(config + 0x5c) == 0) {
+                    if (*(short *)(config + 0x44) == 0) {
+                        if ((pm_targets == 0) && (*(short *)(config + 0x5e) == 0)) {
+                            pm_printf(gettext("Error: No targets were specified. Use the -h flag for help.\n"));
+                        }
+                    } else {
+                        sync_list(pm_targets);
+                    }
+                } else {
+                    sync_info(pm_targets);
+                }
+            } else {
+                sync_search(pm_targets);
+            }
+        }
+    } else {
+        pmtransflag_t* flags;
+
+        if (trans_init(flags) != -1) {
+            sync_cleancache(*(short*)(config + 0x58));
+            putchar(10);
+            sync_cleandb_all();
+        }
+    }
+
+    return;
 }
 
 int main(int argc, char** argv) {

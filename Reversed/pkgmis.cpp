@@ -686,6 +686,15 @@ void dump_pkg_changelog(pmpkg_t* pkg_data) {
     }
 }
 
+void dump_pkg_sync(pmpkg_t* pkg_data, pmdb_t* db) {
+    if (pkg_data != 0) {
+        string_display(gettext("Repository     :"), alpm_pkg_get_name(pkg_data));
+        dump_pkg_full(pkg_data, db);
+    }
+
+    return;
+}
+
 void check(pmpkg_t* pkg_data) {
     struct stat sb;
     char buf [4104];
@@ -770,7 +779,7 @@ char* mdirname(char* input) {
     }
     return output;
 }
-
+sync_clea
 char* resolve_path(char* input) {
     char* __resolved = (char *)calloc(0x1001,1);
 
@@ -1564,6 +1573,375 @@ void sync_list(alpm_list_t* pm_targets, alpm_list_t* syncdb) {
     }
 }
 
+void sync_info(alpm_list_t* pm_targets, char** syncdb) {
+    char** i = (char **)pm_targets;
+    char** sync_db = syncdb_char;
+
+    if (syncdb_char == (char **)0x0) {
+        for (; i != (char **)0x0; i = (char **)alpm_list_next(i)) {
+            pmdb_t* db = alpm_list_getdata(i);
+
+            for (j = alpm_db_get_pkgcache(db); j != 0; j = alpm_list_next(j)) {
+                alpm_db_get_name(db);
+                dump_pkg_sync(alpm_list_getdata(j), db);
+            }
+        }
+    } else {
+        while (i = sync_db, i != (char **)0x0) {
+            bool pkg_match = false;
+
+            strncpy(buf, *i, 0x200);
+            char* pkg_name = strchr(buf,0x2f);
+            alpm_list_t* j = pm_targets;
+
+            if (pkg_name == (char *)0x0) {
+                for (; j != 0; j = alpm_list_next(j)) {
+                    db = alpm_list_getdata(j);
+
+                    for (k = alpm_db_get_pkgcache(db); k != 0; k = alpm_list_next(k)) {
+                        pmpkg_t* pkg = alpm_list_getdata(k);
+                        pkg_name = (char *)alpm_pkg_get_name(pkg);
+                        int pkg_name_match = strcmp(pkg_name,buf);
+
+                        if (pkg_name_match == 0) {
+                            alpm_db_get_name(db);
+                            dump_pkg_sync(k, db);
+                            pkg_match = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!pkg_match) {
+                    pm_fprintf(gettext("Error: The package \'%s\' was not found.\n"), pkg_name);
+                }
+            }
+            else {
+                *pkg_name = '\0';
+
+                for (; l = 0, j != 0; j = alpm_list_next(j)) {
+                    pmdb_t* l = alpm_list_getdata(j);
+                    char* db_name = (char *)alpm_db_get_name(l);
+                    int pkg_name_match = strcmp(buf,db_name);
+
+                    if (pkg_name_match == 0) break;
+                }
+
+                if (l == 0) {
+                    pm_fprintf(gettext("Error: The repository \'%s\' does not exist.\n"), pkg_name);
+                    break;
+                }
+
+                for (k = alpm_db_get_pkgcache(l); k != 0; k = alpm_list_next(k)) {
+                    db = alpm_list_getdata(k);
+                    db_name = (char *)alpm_pkg_get_name(db);
+                    pkg_name_match = strcmp(db_name,pkg_name + 1);
+
+                    if (pkg_name_match == 0) {
+                        alpm_db_get_name(l);
+                        dump_pkg_sync(k, db);
+                        break;
+                    }
+                }
+            }
+
+            sync_db = (char **)alpm_list_next(i);
+        }
+    }
+}
+
+void sync_search(alpm_list_t* pm_targets, alpm_list_t* syncdb) {
+    for (alpm_list_t* i = syncdb; i != 0; i = alpm_list_next(i)) {
+        pmdb_t* s_db = alpm_list_getdata(i);
+        alpm_list_t* pkg_data;
+
+        if (pm_targets == 0) {
+            pkg_data = alpm_db_get_pkgcache(s_db);
+        } else {
+            pkg_data = alpm_db_search(s_db, pm_targets);
+        }
+
+        if (pkg_data != 0) {
+            for (j = pkg_data; j != 0; j = alpm_list_next(j)) {
+                pmpkg_t* pkg = alpm_list_getdata(j);
+                char* pkg_version;
+                char* pkg_name;
+                char* s_db_name;
+                size_t pkg_size;
+
+                if (*(short *)(config + 2) == 0) {
+                    pkg_version = alpm_pkg_get_version(pkg);
+                    pkg_name = alpm_pkg_get_name(pkg);
+                    s_db_name = alpm_db_get_name(s_db);
+
+                    printf("%s/%s %s", s_db_name, pkg_name, pkg_version);
+                } else {
+                    pkg_version = alpm_pkg_get_name(pkg);
+                    printf("%s", pkg_version);
+                }
+
+                if ((*(short *)(config + 2) == 0) && (*(short *)(config + 0x76) != 0)) {
+                    pkg_size = alpm_pkg_get_size(pkg);
+                    printf((char *)((double)pkg_size / 1048576.0), " [%.2f MB]");
+                }
+                if (*(short *)(config + 2) == 0) {
+                    alpm_list_t* pkg_groups = alpm_pkg_get_groups(pkg);
+
+                    if (pkg_groups != 0) {
+                        printf(" (");
+
+                        for (; pkg_groups != 0; pkg_groups = alpm_list_next(pkg_groups)) {
+                            pkg_version = alpm_list_getdata(pkg_groups);
+                            printf("%s", pkg_version);
+
+                            pkg_size = alpm_list_next(pkg_groups);
+
+                            if (pkg_size != 0) {
+                                putchar(' ');
+                            }
+                        }
+                        putchar(')');
+                    }
+                    print_installed(s_db, pkg);
+                    printf("\n    ");
+
+                    const char* desc = alpm_pkg_get_desc(pkg);
+                    indentprint(desc, strlen(desc));
+                }
+
+                putchar(10);
+                sleep(3);
+            }
+        }
+    }
+    return;
+}
+
+void sync_cleancache(int c) {
+    alpm_list_t* syncdbs = alpm_option_get_syncdbs();
+    pmdb_t* localdb = alpm_option_get_localdb();
+
+    for (alpm_list_t* i = alpm_option_get_cachedirs(); i != 0; i = alpm_list_next(i)) {
+        char* cachedir = alpm_list_getdata(i);
+        char* __format = (char *)gettext("Cache directory: %s\n");
+
+        printf(__format, cachedir);
+    }
+
+    if (*(short *)(config + 0x7a) == 0) {
+        *(short *)(config + 0x7a) = 1;
+    }
+
+    int yn_out;
+
+    if (c == 1) {
+        yn_out = yesno(gettext("Do you want to remove all other packages from cache?"));
+    } else {
+        yn_out = noyes(gettext("Do you want to remove ALL cached files?"));
+    }
+
+    if (yn_out != 0) {
+        for (i = alpm_option_get_cachedirs(); i != 0; i = alpm_list_next(i)) {
+            char* cachedirs_name = (char *)alpm_list_getdata(i);
+            DIR* d = opendir(cachedirs_name);
+
+            if (d == (DIR *)0x0) {
+                pm_fprintf(gettext("Error: The cache directory %s could not be accessed.\n"), cachedirs_name);
+            } else {
+                rewinddir(d);
+
+                while (j = readdir(d), j != (dirent *)0x0) {
+                    bool match = true;
+                    pmpkg_t* pkg;
+                    pmdb_t* pkg_db;
+                    yn_out = strcmp(j->d_name,".");
+
+                    char buf[4104];
+                    
+                    if ((yn_out != 0) && (yn_out = strcmp(j->d_name, ".."), yn_out != 0)) {
+                        snprintf(buf, 0x1000, "%s%s", cachedirs_name, j->d_name);
+
+                        if (c < 2) {
+                            yn_out = alpm_pkg_load(buf, 0, &pkg);
+
+                            if ((yn_out == 0) && (pkg != 0)) {
+                                char* pkg_name = alpm_pkg_get_name(pkg);
+                                char* pkg_version = alpm_pkg_get_version(pkg);
+                                char* cachedir;
+
+                                if (((*(ushort *)(config + 0x7a) & 1) != 0) && (pkg_db = alpm_db_get_pkg(localdb, pkg_name), pkg_db != 0)) {
+                                        cachedir = alpm_pkg_get_version(pkg_db);
+                                        yn_out = alpm_pkg_vercmp(pkg_version, cachedir);
+
+                                        if (yn_out == 0) {
+                                            match = false;
+                                        }
+                                }
+
+                                if ((*(ushort *)(config + 0x7a) & 2) != 0) {
+                                    alpm_list_t* k = syncdbs;
+
+                                    while ((k != 0 && (match))) {
+                                        pmdb_t* sync_db_current = alpm_list_getdata(k);
+                                        pmpkg_t* pkg_db = alpm_db_get_pkg(sync_db_current, pkg_name);
+
+                                        if (pkg_db != 0) {
+                                            cachedir = alpm_pkg_get_version(pkg_db);
+                                            yn_out = alpm_pkg_vercmp(pkg_version, cachedir);
+
+                                            if (yn_out == 0) {
+                                                match = false;
+                                            }
+                                        }
+
+                                        k = alpm_list_next(k);
+                                    }
+                                }
+
+                                if (match) {
+                                    unlink(buf);
+                                }
+                            } else {
+                                if (yesno(gettext("The file %s is likely invalid. Do you want to remove it?")) != 0) {
+                                    unlink(buf);
+                                }
+                            }
+                        }
+                        else {
+                            unlink(buf);
+                        }
+                    }
+                }
+
+                closedir(d);
+            }
+        }
+    }
+}
+
+void rmrf(char* dir) {
+    int d = unlink(dir);
+    char buf[4104];
+
+    if ((d != 0) && (err_loc = __errno_location(), *err_loc != 2)) {
+        int* err_loc = __errno_location();
+
+        if ((*err_loc == 1) || (err_loc = __errno_location(), *err_loc == 0x15)) {
+            DIR* __dirp = opendir(dir);
+
+            if (__dirp != (DIR *)0x0) {
+                dirent* dr = readdir(__dirp);
+
+                while (dr != (dirent *)0x0) {
+                    if (dr->d_ino != 0) {
+                        sprintf(buf, "%s/%s", dir, dr->d_name);
+                        d = strcmp(dr->d_name,"..");
+
+                        if ((d != 0) && (d = strcmp(dr->d_name, "."), d != 0)) {
+                            rmrf(err_loc);
+                        }
+                    }
+                    
+                    dr = readdir(__dirp);
+                }
+
+                closedir(__dirp);
+                rmdir(dir);
+            }
+        } else {
+            __errno_location();
+        }
+    }
+}
+
+void sync_cleandb(char* db_dir) {
+    DIR* __dirp = opendir(db_dir);
+
+    if (__dirp == (DIR *)0x0) {
+        pm_fprintf(gettext("Error: Could not access the database directory.\n"));
+    } else {
+        alpm_list_t* sync_dbs = alpm_option_get_syncdbs();
+
+        do {
+            while( true ) {
+                bool match;
+                char* dir_name;
+                int dir_match;
+
+                do {
+                    dirent* d = readdir(__dirp);
+
+                    if (d == (dirent *)0x0) {
+                        closedir(__dirp);
+                        return;
+                    }
+
+                    match = false;
+                    dir_name = d->d_name;
+                    dir_match = strcmp(dir_name,".");
+                } while ((((dir_match == 0) || (dir_match = strcmp(dir_name, ".."), dir_match == 0)) ||
+                            (dir_match = strcmp(dir_name, "sync"), dir_match == 0)) ||
+                        ((dir_match = strcmp(dir_name, "local"), dir_match == 0 ||
+                            (dir_match = strcmp(dir_name, "db.lck"), dir_match == 0))));
+
+                snprintf(buf, 0x1000, "%s%s", db_dir, dir_name);
+
+                struct stat* restrict;
+
+                stat(buf, (stat *)restrict);
+                int buf_len = strlen(buf);
+
+                if (((restrict[24] & 0xf000) == 0x4000) || (dir_match = strcmp(restrict + buf_len + 0x8d, ".db"), dir_match != 0)) break;
+
+                if (c != 0) {
+                    buf_len = strlen(dir_name);
+                    dir_name = strndup(dir_name,buf_len - 3);
+                    alpm_list_t* sync_dbs_temp = sync_dbs;
+
+                    while ((sync_dbs_temp != 0 && (!match))) {
+                        pmdb_t* syncdb = alpm_list_getdata(sync_dbs_temp);
+                        char* __s2 = (char *)alpm_db_get_name(syncdb);
+
+                        int dir_match = strcmp(dir_name,__s2);
+
+                        sync_dbs_temp = alpm_list_next(sync_dbs_temp);
+                        match = (dir_match == 0);
+                    }
+                }
+
+                if (!match) {
+                    int yn_out = yesno(gettext("Do you want to remove %s?"));
+                    
+                    if ((yn_out != 0) && (rmrf(), yn_out != 0)) {
+                        closedir(__dirp);
+                        return;
+                    }
+                }
+            }
+
+            rmrf(db_dir);
+        } while (rewinddir(__dirp) == 0);
+
+        pm_fprintf(gettext("Error: Could not remove the following: %s\n"));
+        closedir(__dirp);
+    }
+}
+
+void sync_cleandb_all() {
+    char buf[4104];
+
+    char* db_path = alpm_option_get_dbpath();
+    __format = (char *)gettext("Database directory: %s\n");
+
+    printf(__format, db_path);
+
+    if (yesno(gettext("Do you want to remove ALL unused repositories?")) != 0) {
+        sync_cleandb(db_path);
+        sprintf(buf, "%s%s", db_path, "sync/");
+        sync_cleandb(db_path);
+    }
+}
+
 void p_sync(alpm_list_t* pm_targets) {
     if (*(short *)(config + 0x58) == 0) {
         alpm_list_t* syncdb = alpm_option_get_syncdbs();
@@ -1589,10 +1967,10 @@ void p_sync(alpm_list_t* pm_targets) {
                         sync_list(pm_targets, syncdb);
                     }
                 } else {
-                    sync_info(pm_targets);
+                    sync_info(pm_targets, (char**)syncdb);
                 }
             } else {
-                sync_search(pm_targets);
+                sync_search(pm_targets, syncdb);
             }
         }
     } else {

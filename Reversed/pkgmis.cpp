@@ -13,6 +13,10 @@
 // Global variables
 int* config;
 alpm_list_t* pm_targets;
+int prevpercent;
+int on_progress;
+alpm_list_t* output;
+timeval* last_time;
 
 // Helper functions
 void pm_vfprintf(const char* template) {
@@ -26,6 +30,15 @@ void pm_printf(const char* template) {
 
 void pm_fprintf(const char* template) {
     pm_vfprintf(template);
+}
+
+void pm_asprintf(const char* template, char** vals) {
+    va_list va;
+    out = vasprintf(vals, template, &va);
+
+    if (out == -1) {
+        pm_fprintf(gettext("Error: String allocation failed!\n"));
+    }
 }
 
 void handler(int input) {
@@ -435,6 +448,33 @@ void list_display(char* field, alpm_list_t* list) {
         putchar(10);
     }
     
+    return;
+}
+
+void list_display_linebreak(char* field, alpm_list_t* list) {
+    int n = 0;
+    
+    if (field != 0) {
+        n = string_length(field) + 1;
+        printf("%s ",field);
+    }
+    
+    if (list == 0) {
+        puts('None');
+    } else {
+        indentprint(alpm_list_getdata(list), n);
+        putchar(10);
+
+        for (alpm_list_t* i = alpm_list_next(list); i != 0; i = alpm_list_next(i)) {
+            for (int j = 1; j <= n; j = j + 1) {
+                putchar(' ');
+            }
+
+            indentprint(alpm_list_getdata(i), n);
+            putchar(10);
+        }
+    }
+
     return;
 }
 
@@ -1009,17 +1049,532 @@ void p_query(alpm_list_t* pm_targets) {
     }
 }
 
+void display_optdepends(pmpkg_t* pkg) {
+    alpm_list_t* pkg_opt_depends = alpm_pkg_get_optdepends(pkg);
+
+    if (pkg_opt_depends != 0) {
+        printf((char *)gettext("Optional dependencies for %s\n"), alpm_pkg_get_name(pkg));
+        list_display_linebreak(alpm_pkg_get_name(pkg), pkg_opt_depends);
+    }
+
+    return;
+}
+
+void cb_trans_evt(pmpkg_t* pkg, char* switch_val) {
+    switch(switch_val) {
+        case 9:
+            if (*(short *)(config + 0xc) != 0) {
+                printf((char *)gettext("installing %s...\n"), alpm_pkg_get_name(pkg));
+            }
+            break;
+
+        case 10:
+            alpm_logaction("installed %s (%s)\n", alpm_pkg_get_name(pkg), alpm_pkg_get_version(pkg));
+            display_optdepends(pkg);
+            break;
+
+        case 0x16:
+            printf((char *)gettext("success!\n"));
+            break;
+
+        case 0x17:
+            printf((char *)gettext("failed.\n"));
+            break;
+
+        case 0x19:
+            printf((char *)gettext(":: Retrieving packages from %s...\n"), pkg);
+    }
+
+    fflush(stdout);
+    return;
+}
+
+void display_repo_list(alpm_list_t* list) {
+    printf(":: ");
+    list_display((char *)gettext("Repository %s\n"), list);
+
+    return;
+}
+
+void select_display(alpm_list_t* head) {
+    alpm_list_t* list = 0;
+    char* db_name = (char *)0x0;
+
+    for (i = head; i != 0; i = alpm_list_next(i)) {
+        pmpkg_t* pkg = alpm_list_getdata(i);
+        pmdb_t* db = alpm_pkg_get_db(pkg);
+        
+        if (db_name == (char *)0x0) {
+            db_name = (char *)alpm_db_get_name(db);
+        }
+
+        char* db2_name = (char *)alpm_db_get_name(db);
+        int db_match = strcmp(db2_name,db_name);
+
+        if (db_match != 0) {
+            display_repo_list(list);
+            db_name = (char *)alpm_db_get_name(db);
+        }
+
+        pm_asprintf(alpm_pkg_get_name(pkg));
+        list = alpm_list_add(list, 0);
+    }
+
+    display_repo_list(list);
+}
+
+void flush_term_input() {
+    int f;
+
+    f = fileno(stdin);
+    f = isatty(f);
+    if (f != 0) {
+        f = fileno(stdin);
+        tcflush(f,0);
+    }
+    return;
+}
+
+void strtrim(char* str) {
+    char* temp;
+    ushort** out;
+    size_t temp_len;
+
+    if ((str != (byte *)0x0) && (temp = str, *str != 0)) {
+        while (out = __ctype_b_loc(), ((*out)[*temp] & 0x2000) != 0) {
+            temp = temp + 1;
+        }
+
+        if (temp != str) {
+            temp_len = strlen((char *)temp);
+            memmove(str,temp, temp_len + 1);
+        }
+
+        if (*str != 0) {
+            temp_len = strlen((char *)str);
+            temp = str + (temp_len - 1);
+
+            while (out = __ctype_b_loc(), ((*out)[*temp] & 0x2000) != 0) {
+                temp = temp + -1;
+            }
+
+            temp[1] = 0;
+        }
+    }
+
+    return;
+}
+
+int parseindex(char* str, int* out, int lower_bound, int higher_bound) {
+    char* temp = (char *)0x0;
+    long long_val = strtol(str, &temp, 10);
+    int int_val = (int)long_val;
+
+    if (*temp == '\0') {
+        if ((int_val < (int)lower_bound) || ((int)higher_bound < int_val)) {
+            __format = (char *)gettext("Invalid value: %d is not between %d and %d\n");
+            fprintf(stderr, __format, long_val & 0xffffffff, (ulong)lower_bound, (ulong)higher_bound);
+        }
+        else {
+            *out = int_val;
+        }
+    } else {
+        __format = (char *)gettext("Invalid number: %s\n");
+        fprintf(stderr, __format, str);
+    }
+
+    return int_val;
+}
+
+int select_question() {
+    FILE* ss_out;
+
+    if (*(short *)(config + 10) == 0) {
+        ss_out = stderr;
+    } else {
+        ss_out = stdout;
+    }
+
+    while( true ) {
+        fputc(10, ss_out);
+
+        char* __format = (char *)gettext("Enter a number (default=%d)");
+        fprintf(ss_out, __format, 1);
+
+        fwrite(": ", 1, 2, ss_out);
+
+        if (*(short *)(config + 10) != 0) break;
+
+        flush_term_input();
+
+        __format = fgets(buf,0x20,stdin);
+
+        if (((__format == (char *)0x0) || (strtrim(buf), buf[0] == '\0')) || (parseindex(__format, ss_out, 1, 10) == 0)) {
+            return;
+        }
+    }
+
+    fputc(10, ss_out);
+    return;
+}
+
+int question(char* str, va_list va, int val) {
+    char* f;
+    int case_out;
+
+    if (*(short *)(::config + 10) == 0) {
+        ss_out = stderr;
+    } else {
+        ss_out = stdout;
+    }
+
+    fflush(stdout);
+    fflush(stderr);
+    vfprintf(ss_out, str, va);
+
+    if (config == 0) {
+        __format = gettext("[y/N]");
+        fprintf(ss_out, " %s ", __format);
+    } else {
+        __format = gettext("[Y/n]");
+        fprintf(ss_out, " %s ", __format);
+    }
+
+    if (*(short *)(::config + 10) == 0) {
+        fflush(ss_out);
+        flush_term_input();
+        f = fgets(buf,0x20,stdin);
+
+        if ((f != (char *)0x0) && (strtrim(buf), buf[0] != '\0')) {
+            f = (char *)gettext("Y");
+            case_out = strcasecmp(buf,f);
+
+            if (case_out != 0) {
+                f = (char *)gettext("YES");
+                case_out = strcasecmp(buf,f);
+
+                if (case_out != 0) {
+                    f = (char *)gettext("N");
+                    case_out = strcasecmp(buf,f);
+
+                    if (case_out != 0) {
+                        f = (char *)gettext("NO");
+                        strcasecmp(buf,f);
+                    }
+                }
+            }
+        }
+    } else {
+        fputc(10,ss_out);
+    }
+
+    return case_out;
+}
+
+int yesno(char* str) {
+    struct va_list va;
+    return question(str, va, 1);
+}
+
+int noyes(char* str) {
+    struct va_list va;
+    return question(str, va, 0);
+}
+
+void cb_trans_conv(char* depends, char* second_dep, char* list, uint config, uint* out) {
+    pm_printf(gettext("TODO this is one of the worst ever functions written. void *data ? wtf\n"));
+
+    if (config == 0x40) {
+        int list_count = alpm_list_count(list);
+        char* list_depends = alpm_dep_compute_string(depends);
+
+        printf((char *)gettext("There are %d packages available for %s:\n"), (ulong)list_count, list_depends);
+
+        select_display(list);
+
+        *out = select_question();
+    } else if (config < 0x41) {
+        if (config == 8) {
+            *out = yesno(gettext("File %s is corrupted. Do you want to delete it?"));
+        } else if (config < 9) {
+            if (config == 2) {
+                alpm_pkg_get_name(depends);
+                alpm_pkg_get_name(list);
+                
+                *out = yesno(gettext("Replace %s with %s/%s?"));
+            } else if (config == 4) {
+                int list_compare = strcmp(list,second_dep);
+                
+                if ((list_compare == 0) || (list_compare = strcmp(depends,second_dep), list_compare == 0)) {
+                    *out = noyes(gettext("%s and %s are in conflict. Remove %s?"));
+                } else {
+                    *out = noyes(gettext("%s and %s are in conflict (%s). Remove %s?"));
+                }
+            }
+        }
+    }
+
+    if ((*(short *)(::config + 0x6c) != 0) && ((*(uint *)(::config + 0x70) & config) != 0)) {
+        *out = (uint)(*out == 0);
+    }
+
+    return;
+}
+
+double get_update_timediff(int in) {
+    timeval ts;
+
+    if (in == 0) {
+        gettimeofday(&ts, NULL);
+        
+        if (0.2000000029802322 <=
+            (double)(ts.tv_usec - last_time.tv_usec) / 1000000.0 +
+            (double)(ts.tv_sec - last_tim.tv_sece) {
+            last_time_.tv_sec = ts.tv_sec;
+            last_time_.tv_usec = ts.tv_usec;
+        }
+    } else {
+        gettimeofday((timeval *)last_time,(__timezone_ptr_t)0x0);
+    }
+}
+
+void cb_trans_progress(ulong input, int c, char *str, size_t len, alpm_list_t* in_R8) {
+    int int_str_len;
+    size_t sVar1;
+    wchar_t *__s;
+    int temp;
+    uint count;
+    uint out;
+    uint j;
+    ulong i;
+    wchar_t *counter;
+    alpm_list_t* k;
+
+    if (*(short *)(config + 0xc) != 0) {
+        return;
+    }
+
+    if (getcols() == 0) {
+        return;
+    }
+    if (c == 0) {
+        get_update_timediff(0);
+    } else if (c == 100) {
+        if (prevpercent == 100) {
+            return;
+        }
+    }
+    else {
+        if (str == (char *)0x0) {
+            return;
+        }
+
+        if (c == prevpercent) {
+            return;
+        }
+
+        if (get_update_timediff(0) < 0.2000000029802322) {
+            return;
+        }
+    }
+
+    temp = (getcols() * 6) / 10;
+    
+    if (temp < 0x32) {
+        temp = 0x32;
+    }
+
+    count = 1;
+    i = input;
+    
+    while (i = i / 10, i != 0) {
+        count = count + 1;
+    }
+
+    temp = temp + count * -2;
+    prevpercent = c;
+    len = strlen((char *)0x0);
+
+    if (str == (char *)0x0) {
+        int_str_len = 0;
+    } else {
+        len_str = strlen(str);
+        int_str_len = (int)sVar1;
+    }
+
+    int_str_len = int_str_len + (int)len + 2;
+    __s = (wchar_t *)calloc((long)int_str_len, 4);
+    int_str_len = swprintf(__s, (long)int_str_len, L"%s %s", 0, str);
+    int_str_len = wcswidth(__s, (long)int_str_len);
+    out = (temp + -4) - int_str_len;
+
+    if ((int)out < 0) {
+        counter = __s;
+
+        for (j = temp - 7; (0 < (int)j && (int_str_len = wcwidth(*counter), int_str_len < (int)j));
+            j = j - int_str_len) {
+            int_str_len = wcwidth(*counter);
+            counter = counter + 1;
+        }
+
+        wcscpy(counter, L"...");
+        out = j;
+    }
+
+    printf("(%*ld/%*ld) %ls%-*s", (ulong)count, in_R8, (ulong)count, input, __s, (ulong)out, "");
+
+    if (c == 100) {
+        on_progress = 0;
+
+        for (k = output; k != 0x0; k = alpm_list_next(k)) {
+            printf("%s", *k);
+        }
+
+        fflush(stdout);
+    } else {
+        on_progress = 1;
+    }
+
+    return;
+}
+
+int trans_init(pmtransflags_t* flags) {
+    int out;
+
+    if (*(short *)(config + 0x10) == 0) {
+        out = alpm_trans_init(flags, cb_trans_evt, cb_trans_conv, cb_trans_progress);
+    } else {
+        out = alpm_trans_init(flags,0,0,0);
+    }
+
+    if (out == -1) {
+        pm_fprintf(gettext("Error: Transaction initialization failed! (%s)\n"), alpm_strerrorlast());
+    }
+
+    return out;
+}
+
+int sync_synctree(pmpkg_t* syncdb, int level) {
+    pmtransflag_t* flags;
+    int count = 0;
+    i = syncdb;
+
+    if (trans_init(flags) != -1) {
+        while (i != 0) {
+            int update_out = alpm_db_update(1 < level, syncdb);
+
+            if (update_out < 0) {
+                pm_fprintf(gettext("Error: Failed to update database %s. (%s)\n"), alpm_strerrorlast(), alpm_db_get_name(syncdb));
+            } else if (update_out == 1) {
+                char* db_name = alpm_db_get_name(syncdb);
+                printf((char *)gettext("The database %s is up to date.\n"),db_name);
+
+                count = count + 1;
+            } else {
+                count = count + 1;
+            }
+
+            i = alpm_list_next(i);
+        }
+
+        if (count == 0) {
+            pm_fprintf(gettext("Error: Could not sync any databases.\n"));
+        }
+    }
+
+    return count;
+}
+
+void print_installed(pmdb_t* db, pmpkg_t* pkg) {
+    const char* pkg_name = alpm_pkg_get_name(pkg);
+    char* pkg_version = (char *)alpm_pkg_get_version(pkg);
+    pmpkg_t* pkg_data = alpm_db_get_pkg(db,pkg_name);
+
+    if (pkg_data != 0) {
+        char* pkg_data_version = (char *)alpm_pkg_get_version(pkg_data);
+        int pkg_installed = strcmp(pkg_data_version,pkg_version);
+    
+        if (pkg_installed == 0) {
+            pkg_name = gettext("installed");
+            printf(" [%s]",pkg_name);
+        }
+        else {
+            pkg_name = gettext("installed");
+            printf(" [%s: %s]", pkg_name, pkg_data_version);
+        }
+    }
+    return;
+}
+
+void sync_list(alpm_list_t* pm_targets, alpm_list_t* syncdb) {
+    alpm_list_t* db_list;
+    alpm_list_t* i = pm_targets;
+    alpm_list_t* curr_db = syncdb;
+
+    if (pm_targets != 0) {
+        for (; curr_db = db_list, i != 0; i = alpm_list_next(i)) {
+            char* pm_db_name = (char *)alpm_list_getdata(i);
+            alpm_list_t* new_db;
+
+            for (j = syncdb; curr_db = new_db, j != 0; j = alpm_list_next(j)) {
+                curr_db = alpm_list_getdata(j);
+
+                char* db_name = (char *)alpm_db_get_name(curr_db);
+                int db_match = strcmp(pm_db_name, db_name);
+
+                if (db_match == 0) break;
+            }
+
+            alpm_list_t* new_db = curr_db;
+
+            if (new_db == NULL) {
+                pm_fprintf(gettext("Error: The repository \"%s\" was not found.\n"));
+                return;
+            }
+
+            db_list = alpm_list_add(db_list, new_db);
+        }
+    }
+
+    db_list = curr_db;
+
+    for (i = db_list; i != 0; i = alpm_list_next(i)) {
+        pmpkg_t* pkg_cache = alpm_list_getdata(i);
+
+        for (alpm_list_t* j = alpm_db_get_pkgcache(pkg_cache); j != 0; j = alpm_list_next(j)) {
+            pmpkg_t* pkg_data = alpm_list_getdata(j);
+
+            if (*(short *)(config + 2) == 0) {
+                char* pkg_version = alpm_pkg_get_version(pkg_data);
+                char* pkg_data = alpm_pkg_get_name(pkg_data);
+                char* pkg_name = alpm_db_get_name(pkg_cache);
+
+                printf("%s %s %s", pkg_name, pkg_data, pkg_version);
+                print_installed(i, pkg_data);
+                putchar(10);
+            } else {
+                char* pm_db_name = (char *)alpm_pkg_get_name(pkg_data);
+                puts(pm_db_name);
+            }
+
+            ts.tv_sec = 0;
+            ts.tv_nsec = 100000000;
+            nanosleep(&ts,(timespec *)0x0);
+        }
+    }
+}
+
 void p_sync(alpm_list_t* pm_targets) {
     if (*(short *)(config + 0x58) == 0) {
         alpm_list_t* syncdb = alpm_option_get_syncdbs();
 
-        if ((syncdb == 0) || (syncdb = alpm_list_count(syncdb))== 0) {
+        if ((syncdb == 0) || (syncdb = alpm_list_count(syncdb)) == 0) {
             pm_printf(gettext("Error: No package repositories configured.\n"));
         } else {
             if (*(short *)(config + 0x5e) != 0) {
                 printf((char *)gettext("Refreshing package databases... please wait...\n"));
 
-                if (sync_synctree(syncdb, *(short*)(config + 0x5e)) == 0) {
+                if (sync_synctree(alpm_list_getdata(syncdb), *(short*)(config + 0x5e)) == 0) {
                     return;
                 }
             }
@@ -1031,7 +1586,7 @@ void p_sync(alpm_list_t* pm_targets) {
                             pm_printf(gettext("Error: No targets were specified. Use the -h flag for help.\n"));
                         }
                     } else {
-                        sync_list(pm_targets);
+                        sync_list(pm_targets, syncdb);
                     }
                 } else {
                     sync_info(pm_targets);

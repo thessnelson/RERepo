@@ -11,6 +11,8 @@
 #include <getopt.h>
 
 /*
+
+
 Functions to potentially improve:
 -handler(). EXCLUSIVE TO THIS VERSION.
 -parsearg_op(). Reference pacman.c
@@ -20,6 +22,7 @@ Functions to potentially improve:
 -needs_root(). Reference util.c
 WHATEVER IS AT LINE 338-354 MAKES NO SENSE TO ME. WHAT IS IT?
 -All the other string stuff is in util.c.
+-
 
 -there's some db.lock stuff. look at lockfile or alpm_option_get via pacman.
 pacman/src/pacman/pacman.c
@@ -105,6 +108,8 @@ void version() {
     puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
     puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*/\n");
 }
+
+// PACMAN.C Section of the code! //
 
 //returns the pathname of a given package.
 //Nothing to improve
@@ -353,6 +358,7 @@ alpm_list_t* filter(pmpkg_t* pkg_data) {
     }
     return output;
 }
+// UTIL.C SECTION OF THE CODE! //
 
 //ref'd util.c
 int getcols() {
@@ -452,6 +458,7 @@ void string_display(char* str1, void* str2) {
     putchar(10);
 }
 
+//Ref'd from util.c
 void list_display(char* field, alpm_list_t* list) {
     void* data;
     int new_len;
@@ -499,6 +506,7 @@ void list_display(char* field, alpm_list_t* list) {
     return;
 }
 
+//Ref'd from util.c
 void list_display_linebreak(char* field, alpm_list_t* list) {
     int n = 0;
     
@@ -525,7 +533,9 @@ void list_display_linebreak(char* field, alpm_list_t* list) {
 
     return;
 }
+// CHECK.C SECTION OF THE CODE //
 
+//Calcs a checksum, which is a direct reference to check.c
 int get_backup_file_status(alpm_list_t* val, char* cs) {
     char *__s1;
     char buf [4104];
@@ -549,6 +559,7 @@ int get_backup_file_status(alpm_list_t* val, char* cs) {
 
     return output;
 }
+
 
 void dump_pkg_backups(pmpkg_t* pkg_data) {
     const char* root = alpm_option_get_root();

@@ -19,20 +19,20 @@ alpm_list_t* output;
 timeval* last_time;
 
 // Helper functions
-void pm_vfprintf(const char* template) {
+void pm_vfprintf(const char* template) { //Write formatted data from variable -> ostream
     va_list ap;
     vfprintf(stderr, template, ap);
 }
 
-void pm_printf(const char* template) {
+void pm_printf(const char* template) { //print formatted data to stdout
     pm_vfprintf(template);
 }
 
-void pm_fprintf(const char* template) {
+void pm_fprintf(const char* template) { //Write formattwed data to stream
     pm_vfprintf(template);
 }
 
-void pm_asprintf(const char* template, char** vals) {
+void pm_asprintf(const char* template, char** vals) { //Print to allocated string
     va_list va;
     out = vasprintf(vals, template, &va);
 
@@ -41,40 +41,54 @@ void pm_asprintf(const char* template, char** vals) {
     }
 }
 
+//gets file info and writes it somewhere on the drive.
+//There's some weird stuff going on with this one.
 void handler(int input) {
-    fileno(stdout);
+    fileno(stdout); //gets the description of a stdio stream
     fileno(stderr);
 
+    //if we try to write in a place we shouldnt.
     if (input == 0xb) {
         strlen("Error: Segmentation fault!\n");
-        xwrite();
+        xwrite(); //EXTERNAL GNU LIBRARY- writes to data blocks
 
-        exit(0xb);
+        exit(0xb); // terminates calling process
     } if (input == 2) {
         strlen("\nInterrupt signal received.\n");
         xwrite();
         
+        // if we don't flag the transaction to interrupt, we keep moving.
         if (alpm_trans_interrupt() == 0) {
             return;
         }
         xwrite();
     }
 
-    exit(input);
+    exit(input); //Once we're done, get out!
 } 
 
+//Literally just prints stuff. Nothing special. I might mod it though
 void version() {
-    puts("  ____            _                                        ");
-    puts(" |  _ \\ __ _  ___| | ____ _  __ _  ___                     ");
-    puts(" | |_) / _` |/ __| |/ / _` |/ _` |/ _ \\                    ");
-    puts(" |  __/ (_| | (__|   < (_| | (_| |  __/                    ");
-    puts(" |_|  _\\__,_|\\___ |_|\\_\\__,_|\\__, |\\___|                    ");
-    puts(" |  \\/  (_)___ _ __ ___   __|___/__   __ _  __ _  ___ _ __ ");
-    puts(" | |\\/| | / __| \'_ ` _ \\ / _` | \'_ \\ / _` |/ _` |/ _ \\ \'__|");
-    puts(" | |  | | \\__ \\ | | | | | (_| | | | | (_| | (_| |  __/ |   ");
-    puts(" |_|  |_|_|___/_| |_| |_|\\__,_|_| |_|\\__,_|\\__, |\\___ |_|   ");
-    puts("                                           |___/           ");
-    return;
+    puts("/*@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+    puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+    puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+    puts("@@@@@@@@@@//////////(/////////////////////@@@@@@@@\n");
+    puts("@@@@@(/........................////////////////@@@\n");
+    puts("@@//..............................///////////////(\n");
+    puts("//................PACMAN..........////////////////\n");
+    puts("/,................BY................//////////////\n");
+    puts("//................GROUP.4..........///////////////\n");
+    puts("@(/(.............................,////////////////\n");
+    puts("@@@@//............GET...........///////////////@@@\n");
+    puts("@@@@//............THIS..........///////////////@@@\n");
+    puts("@@@@//............BREAD.........///////////////@@@\n");
+    puts("@@@@//..........................///////////////@@@\n");
+    puts("@@@@//..........................///////////////@@@\n");
+    puts("@@@@//..........................///////////////@@@\n");
+    puts("@@@@//..........................///////////////@@@\n");
+    puts("@@@@@@///.................../////////////////@@@@@\n");
+    puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+    puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*/\n");
 }
 
 char* mbasename(char* input) {

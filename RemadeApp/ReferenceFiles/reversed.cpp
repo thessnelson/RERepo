@@ -18,7 +18,8 @@ Functions to potentially improve:
 -cleansync() and all the cache stuff should be merged.
 -config_new(). Reference conf.c
 -needs_root(). Reference util.c
-WHATEVER IS AT LINE 338 MAKES NO SENSE TO ME. WHAT IS IT?
+WHATEVER IS AT LINE 338-354 MAKES NO SENSE TO ME. WHAT IS IT?
+-All the other string stuff is in util.c.
 
 -there's some db.lock stuff. look at lockfile or alpm_option_get via pacman.
 pacman/src/pacman/pacman.c
@@ -353,10 +354,12 @@ alpm_list_t* filter(pmpkg_t* pkg_data) {
     return output;
 }
 
+//ref'd util.c
 int getcols() {
     return ioctl(1, 0x5413);
 }
 
+//Ref'd from util.c
 int string_length(void* str) {
     if(str != NULL) {
         int len = strlen(str) + 1;
@@ -367,6 +370,7 @@ int string_length(void* str) {
     return 0;
 }
 
+//Ref'd util.c
 void indent_print(char* input_str, int len) {
     int str_len;
     size_t input_len;
@@ -431,6 +435,7 @@ void indent_print(char* input_str, int len) {
     return;
 }
 
+//ref'd from util.c
 void string_display(char* str1, void* str2) {
     if (str1 != NULL) {
         printf("%s", str1);

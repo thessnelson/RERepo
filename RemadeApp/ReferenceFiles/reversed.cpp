@@ -12,10 +12,13 @@
 
 /*
 Functions to potentially improve:
--handler()
--parsearg_op()
+-handler(). EXCLUSIVE TO THIS VERSION.
+-parsearg_op(). Reference pacman.c
 -parseargs()
 -cleansync() and all the cache stuff should be merged.
+-config_new(). Reference conf.c
+-needs_root(). Reference util.c
+WHATEVER IS AT LINE 338 MAKES NO SENSE TO ME. WHAT IS IT?
 
 -there's some db.lock stuff. look at lockfile or alpm_option_get via pacman.
 pacman/src/pacman/pacman.c
@@ -289,6 +292,7 @@ void parseargs(int argc, char** argv) {
     }
 }
 
+//From conf.c. FIX THIS!!!
 void config_new() {
     char *conf_path;
     
@@ -306,6 +310,8 @@ void config_new() {
     return;
 }
 
+//The password is "incorrect"...lol
+//References util.c
 void needs_root() {
     int pass;
     char *input;
@@ -329,6 +335,7 @@ void needs_root() {
     exit(1);
 }
 
+//lists targeted packages.
 alpm_list_t* filter(pmpkg_t* pkg_data) {
     int pkg_reason;
     alpm_list_t* output;

@@ -27,6 +27,10 @@ WHATEVER IS AT LINE 338-354 MAKES NO SENSE TO ME. WHAT IS IT?
 
 -Currently looking for void cb_trans_evt(pmpkg_t* pkg, char* switch_val) {
     might be cb_event from callback. not sure.
+
+-cb_trans_conv is intentionally bad and needs fixed.
+    "Your code is bad and you should feel bad for making it"
+
 -there's some db.lock stuff. look at lockfile or alpm_option_get via pacman.
 pacman/src/pacman/pacman.c
 */
@@ -1171,6 +1175,7 @@ void cb_trans_evt(pmpkg_t* pkg, char* switch_val) {
     return;
 }
 
+//from util.c
 void display_repo_list(alpm_list_t* list) {
     printf(":: ");
     list_display((char *)gettext("Repository %s\n"), list);
@@ -1178,6 +1183,7 @@ void display_repo_list(alpm_list_t* list) {
     return;
 }
 
+//from util.c
 void select_display(alpm_list_t* head) {
     alpm_list_t* list = 0;
     char* db_name = (char *)0x0;
@@ -1205,6 +1211,7 @@ void select_display(alpm_list_t* head) {
     display_repo_list(list);
 }
 
+//util.c
 void flush_term_input() {
     int f;
 
@@ -1217,6 +1224,7 @@ void flush_term_input() {
     return;
 }
 
+//util-common.c
 void strtrim(char* str) {
     char* temp;
     ushort** out;
@@ -1247,6 +1255,7 @@ void strtrim(char* str) {
     return;
 }
 
+//util.c
 int parseindex(char* str, int* out, int lower_bound, int higher_bound) {
     char* temp = (char *)0x0;
     long long_val = strtol(str, &temp, 10);
@@ -1268,6 +1277,7 @@ int parseindex(char* str, int* out, int lower_bound, int higher_bound) {
     return int_val;
 }
 
+//util.c
 int select_question() {
     FILE* ss_out;
 
@@ -1300,6 +1310,7 @@ int select_question() {
     return;
 }
 
+//multiselect_question from util.c ?
 int question(char* str, va_list va, int val) {
     char* f;
     int case_out;
@@ -1353,16 +1364,19 @@ int question(char* str, va_list va, int val) {
     return case_out;
 }
 
+//util.c
 int yesno(char* str) {
     struct va_list va;
     return question(str, va, 1);
 }
 
+//util.c
 int noyes(char* str) {
     struct va_list va;
     return question(str, va, 0);
 }
 
+//THIS ONE DEFINITELY NEEDS HELP! I THINK THEY INTENTIONALLY MESSED THIS UP
 void cb_trans_conv(char* depends, char* second_dep, char* list, uint config, uint* out) {
     pm_printf(gettext("TODO this is one of the worst ever functions written. void *data ? wtf\n"));
 

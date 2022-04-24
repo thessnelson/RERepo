@@ -14,6 +14,8 @@
 Functions to potentially improve:
 -handler()
 -parsearg_op()
+-parseargs()
+-cleansync() and all the cache stuff should be merged.
 
 -there's some db.lock stuff. look at lockfile or alpm_option_get via pacman.
 pacman/src/pacman/pacman.c
@@ -199,6 +201,8 @@ void parsearg_op(int param1, int param2) {
     return;
 }
 
+//The other version uses switch cases. Is that faster?
+//Making sure the arguments end up in the right places.
 void parsearg_query(int opt) {
     if (opt == 0x69) {
         config[0x42]++;
@@ -207,6 +211,7 @@ void parsearg_query(int opt) {
     }
 }
 
+//Again, the other one used a ton of switch cases.
 void parsearg_sync(int opt) {
     if (opt == 0x3f3) {
         config[0x68] = config[0x68] | 0x2000;
@@ -229,6 +234,7 @@ void parsearg_sync(int opt) {
     return;
 }
 
+//Pacman version is much cleaner. Parses tags for everything.
 void parseargs(int argc, char** argv) {
     int opt;
     int option_index = 0;

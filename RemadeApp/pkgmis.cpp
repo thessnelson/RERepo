@@ -10,6 +10,15 @@
 #include <sys/utsname.h>
 #include <getopt.h>
 
+/*
+Functions to potentially improve:
+-handler()
+-parsearg_op()
+
+-there's some db.lock stuff. look at lockfile or alpm_option_get via pacman.
+pacman/src/pacman/pacman.c
+*/
+
 // Global variables
 int* config;
 alpm_list_t* pm_targets;
@@ -91,10 +100,13 @@ void version() {
     puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*/\n");
 }
 
+//returns the pathname of a given package.
+//Nothing to improve
 char* mbasename(char* input) {
     return strrchr(input, '/');
 }
 
+//Lists out options or packages for everything. Nothing to fix.
 void usage(int argc, char* argv) {
     alpm_list_t* opt_str = gettext("options");
     alpm_list_t* pkg_str = gettext("package(s)");
@@ -146,11 +158,15 @@ void usage(int argc, char* argv) {
     return;
 }
 
+//Lots of weird bitwise stuff.
+//There's probably something to improve, just not sure what yet.
 void parsearg_op(int param1, int param2) {
     short temp;
-    int in_ESI;
-    int in_EDI;
+    //Neither of these variables are used!!
+    int in_ESI; //Source index
+    int in_EDI; //Destination index
     
+    //There's some kind of swap going on.
     if (param2 == 0x68) {
         if (param1 == 0) {
         config[4] = 1;

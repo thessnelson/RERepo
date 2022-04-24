@@ -21,6 +21,7 @@ Functions to potentially improve:
 -config_new(). Reference conf.c
 -needs_root(). Reference util.c
 WHATEVER IS AT LINE 338-354 MAKES NO SENSE TO ME. WHAT IS IT?
+    -NEVERMIND, THIS IS FROM QUERY.C. NOT ORIGINAL!
 -All the other string stuff is in util.c.
 -Line 757 is from check.c and is either "fast" or "full"
 
@@ -342,6 +343,7 @@ void needs_root() {
 }
 
 //lists targeted packages.
+//I THINK THIS IS FROM QUERY.C
 alpm_list_t* filter(pmpkg_t* pkg_data) {
     int pkg_reason;
     alpm_list_t* output;
@@ -844,7 +846,8 @@ char* mdirname(char* input) {
     }
     return output;
 }
-sync_clea
+
+// lrealpath from query.c arguments are slightly different tho
 char* resolve_path(char* input) {
     char* __resolved = (char *)calloc(0x1001,1);
 
@@ -1052,6 +1055,7 @@ void query_search(alpm_list_t* pm_targets) {
     return;
 }
 
+//pacman_query from query.c
 void p_query(alpm_list_t* pm_targets) {
     alpm_list_t* syncdb;
     size_t db_count;
@@ -1123,6 +1127,7 @@ void p_query(alpm_list_t* pm_targets) {
     }
 }
 
+//From util.c.
 void display_optdepends(pmpkg_t* pkg) {
     alpm_list_t* pkg_opt_depends = alpm_pkg_get_optdepends(pkg);
 
@@ -1133,6 +1138,7 @@ void display_optdepends(pmpkg_t* pkg) {
 
     return;
 }
+
 
 void cb_trans_evt(pmpkg_t* pkg, char* switch_val) {
     switch(switch_val) {

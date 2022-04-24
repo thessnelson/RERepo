@@ -25,6 +25,8 @@ WHATEVER IS AT LINE 338-354 MAKES NO SENSE TO ME. WHAT IS IT?
 -All the other string stuff is in util.c.
 -Line 757 is from check.c and is either "fast" or "full"
 
+-Currently looking for void cb_trans_evt(pmpkg_t* pkg, char* switch_val) {
+    might be cb_event from callback. not sure.
 -there's some db.lock stuff. look at lockfile or alpm_option_get via pacman.
 pacman/src/pacman/pacman.c
 */
@@ -1127,7 +1129,7 @@ void p_query(alpm_list_t* pm_targets) {
     }
 }
 
-//From util.c.
+//From util.c. pmpkg_t is alpm_pkg_t
 void display_optdepends(pmpkg_t* pkg) {
     alpm_list_t* pkg_opt_depends = alpm_pkg_get_optdepends(pkg);
 
@@ -1139,7 +1141,7 @@ void display_optdepends(pmpkg_t* pkg) {
     return;
 }
 
-
+//what does cb stand for? Callback event
 void cb_trans_evt(pmpkg_t* pkg, char* switch_val) {
     switch(switch_val) {
         case 9:

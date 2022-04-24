@@ -22,7 +22,7 @@ Functions to potentially improve:
 -needs_root(). Reference util.c
 WHATEVER IS AT LINE 338-354 MAKES NO SENSE TO ME. WHAT IS IT?
 -All the other string stuff is in util.c.
--
+-Line 757 is from check.c and is either "fast" or "full"
 
 -there's some db.lock stuff. look at lockfile or alpm_option_get via pacman.
 pacman/src/pacman/pacman.c
@@ -754,6 +754,9 @@ void dump_pkg_sync(pmpkg_t* pkg_data, pmdb_t* db) {
 
     return;
 }
+
+// THIS IS FOR CHECK.C again //
+
 //Check_pkg_fast?? check_pkg_full??
 void check(pmpkg_t* pkg_data) {
     struct stat sb;
@@ -787,6 +790,8 @@ void check(pmpkg_t* pkg_data) {
         pm_fprintf(gettext("Warning: The following path is too long: %s%s\n"));
     }
 }
+
+// THIS IS FROM QUERY.C //
 
 void display(pmpkg_t* pkg_data) {
     if (*(short*)(config + 0x42) != 0) {

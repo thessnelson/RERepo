@@ -1146,6 +1146,7 @@ void display_optdepends(pmpkg_t* pkg) {
 }
 
 //what does cb stand for? Callback event
+//cb_event from callback.c ?
 void cb_trans_evt(pmpkg_t* pkg, char* switch_val) {
     switch(switch_val) {
         case 9:
@@ -1377,6 +1378,7 @@ int noyes(char* str) {
 }
 
 //THIS ONE DEFINITELY NEEDS HELP! I THINK THEY INTENTIONALLY MESSED THIS UP
+//I THINK THIS IS CB_QUESTION FROM callback.c?
 void cb_trans_conv(char* depends, char* second_dep, char* list, uint config, uint* out) {
     pm_printf(gettext("TODO this is one of the worst ever functions written. void *data ? wtf\n"));
 
@@ -1417,6 +1419,7 @@ void cb_trans_conv(char* depends, char* second_dep, char* list, uint config, uin
     return;
 }
 
+//callback.c
 double get_update_timediff(int in) {
     timeval ts;
 
@@ -1434,6 +1437,8 @@ double get_update_timediff(int in) {
     }
 }
 
+//fill_progress from callback.c
+//figured this out from a comment in callback.c!
 void cb_trans_progress(ulong input, int c, char *str, size_t len, alpm_list_t* in_R8) {
     int int_str_len;
     size_t sVar1;
@@ -1534,6 +1539,7 @@ void cb_trans_progress(ulong input, int c, char *str, size_t len, alpm_list_t* i
     return;
 }
 
+//from util.c
 int trans_init(pmtransflags_t* flags) {
     int out;
 
@@ -1550,6 +1556,7 @@ int trans_init(pmtransflags_t* flags) {
     return out;
 }
 
+//sync_trans from sync.c ? closest thing I could find.
 int sync_synctree(pmpkg_t* syncdb, int level) {
     pmtransflag_t* flags;
     int count = 0;
@@ -1602,6 +1609,7 @@ void print_installed(pmdb_t* db, pmpkg_t* pkg) {
     return;
 }
 
+//from sync.c
 void sync_list(alpm_list_t* pm_targets, alpm_list_t* syncdb) {
     alpm_list_t* db_list;
     alpm_list_t* i = pm_targets;
@@ -1660,6 +1668,7 @@ void sync_list(alpm_list_t* pm_targets, alpm_list_t* syncdb) {
     }
 }
 
+//from sync.c
 void sync_info(alpm_list_t* pm_targets, char** syncdb) {
     char** i = (char **)pm_targets;
     char** sync_db = syncdb_char;
@@ -1737,6 +1746,7 @@ void sync_info(alpm_list_t* pm_targets, char** syncdb) {
     }
 }
 
+//from sync.c
 void sync_search(alpm_list_t* pm_targets, alpm_list_t* syncdb) {
     for (alpm_list_t* i = syncdb; i != 0; i = alpm_list_next(i)) {
         pmdb_t* s_db = alpm_list_getdata(i);
@@ -1804,6 +1814,7 @@ void sync_search(alpm_list_t* pm_targets, alpm_list_t* syncdb) {
     return;
 }
 
+//from sync.c
 void sync_cleancache(int c) {
     alpm_list_t* syncdbs = alpm_option_get_syncdbs();
     pmdb_t* localdb = alpm_option_get_localdb();
@@ -1906,6 +1917,7 @@ void sync_cleancache(int c) {
     }
 }
 
+//from util.c
 void rmrf(char* dir) {
     int d = unlink(dir);
     char buf[4104];
@@ -1941,6 +1953,7 @@ void rmrf(char* dir) {
     }
 }
 
+//from sync.c
 void sync_cleandb(char* db_dir) {
     DIR* __dirp = opendir(db_dir);
 
@@ -2014,6 +2027,7 @@ void sync_cleandb(char* db_dir) {
     }
 }
 
+//from sync.c
 void sync_cleandb_all() {
     char buf[4104];
 
@@ -2029,6 +2043,7 @@ void sync_cleandb_all() {
     }
 }
 
+//pacman_sync from pacman.c
 void p_sync(alpm_list_t* pm_targets) {
     if (*(short *)(config + 0x58) == 0) {
         alpm_list_t* syncdb = alpm_option_get_syncdbs();
@@ -2073,6 +2088,7 @@ void p_sync(alpm_list_t* pm_targets) {
     return;
 }
 
+//from testpkg.c
 int main(int argc, char** argv) {
     // Set up signals
     struct sigaction new_action, old_action; 

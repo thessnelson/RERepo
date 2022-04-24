@@ -560,6 +560,7 @@ int get_backup_file_status(alpm_list_t* val, char* cs) {
     return output;
 }
 
+// PACKAGE.C SECTION OF THE CODE //
 
 void dump_pkg_backups(pmpkg_t* pkg_data) {
     const char* root = alpm_option_get_root();
@@ -753,7 +754,7 @@ void dump_pkg_sync(pmpkg_t* pkg_data, pmdb_t* db) {
 
     return;
 }
-
+//Check_pkg_fast?? check_pkg_full??
 void check(pmpkg_t* pkg_data) {
     struct stat sb;
     char buf [4104];

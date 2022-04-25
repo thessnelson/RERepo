@@ -766,7 +766,7 @@ void dump_pkg_sync(pmpkg_t* pkg_data, pmdb_t* db) {
 
 // THIS IS FOR CHECK.C again //
 
-//Check_pkg_fast?? check_pkg_full??
+//check_pkg_full??
 void check(pmpkg_t* pkg_data) {
     struct stat sb;
     char buf [4104];
@@ -836,6 +836,7 @@ char* mbasename(char* input) {
     return strrchr(input, '/');
 }
 
+//cannot find this one yet. Still looking! I know it's in query
 char* mdirname(char* input) {
     char* output;
 

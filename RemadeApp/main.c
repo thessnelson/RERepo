@@ -45,7 +45,7 @@
 #include <alpm.h>
 #include <alpm_list.h>
 
-//I HAVE PASTED UP TO LINE 547!!
+//I HAVE PASTED UP TO LINE 757!!
 
 //INTRO FILES (FROM TESTPKG.C)
 
@@ -388,6 +388,303 @@ void version() {
     puts("@@@@@@///.................../////////////////@@@@@\n");
     puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
     puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*/\n");
+}
+
+static const char *get_backup_file_status(const char *root,
+		const alpm_backup_t *backup)
+{
+	char path[PATH_MAX];
+	const char *ret;
+
+	snprintf(path, PATH_MAX, "%s%s", root, backup->name);
+
+	/* if we find the file, calculate checksums, otherwise it is missing */
+	if(access(path, R_OK) == 0) {
+		char *md5sum = alpm_compute_md5sum(path);
+
+		if(md5sum == NULL) {
+			pm_printf(ALPM_LOG_ERROR,
+					_("could not calculate checksums for %s\n"), path);
+			return NULL;
+		}
+
+		/* if checksums don't match, file has been modified */
+		if(strcmp(md5sum, backup->hash) != 0) {
+			ret = "[modified]";
+		} else {
+			ret = "[unmodified]";
+		}
+		free(md5sum);
+	} else {
+		switch(errno) {
+			case EACCES:
+				ret = "[unreadable]";
+				break;
+			case ENOENT:
+				ret = "[missing]";
+				break;
+			default:
+				ret = "[unknown]";
+		}
+	}
+	return ret;
+}
+
+/**
+ * Display the details of a package.
+ * Extra information entails 'required by' info for sync packages and backup
+ * files info for local packages.
+ * @param pkg package to display information for
+ * @param extra should we show extra information
+ */
+void dump_pkg_full(alpm_pkg_t *pkg, int extra)
+{
+	unsigned short cols;
+	time_t bdate, idate;
+	alpm_pkgfrom_t from;
+	double size;
+	char bdatestr[50] = "", idatestr[50] = "";
+	const char *label, *reason;
+	alpm_list_t *validation = NULL, *requiredby = NULL, *optionalfor = NULL;
+
+	/* make aligned titles once only */
+	static int need_alignment = 1;
+	if(need_alignment) {
+		need_alignment = 0;
+		make_aligned_titles();
+	}
+
+	from = alpm_pkg_get_origin(pkg);
+
+	/* set variables here, do all output below */
+	bdate = (time_t)alpm_pkg_get_builddate(pkg);
+	if(bdate) {
+		strftime(bdatestr, 50, "%c", localtime(&bdate));
+	}
+	idate = (time_t)alpm_pkg_get_installdate(pkg);
+	if(idate) {
+		strftime(idatestr, 50, "%c", localtime(&idate));
+	}
+
+	switch(alpm_pkg_get_reason(pkg)) {
+		case ALPM_PKG_REASON_EXPLICIT:
+			reason = _("Explicitly installed");
+			break;
+		case ALPM_PKG_REASON_DEPEND:
+			reason = _("Installed as a dependency for another package");
+			break;
+		default:
+			reason = _("Unknown");
+			break;
+	}
+
+	int v = alpm_pkg_get_validation(pkg);
+	if(v) {
+		if(v & ALPM_PKG_VALIDATION_NONE) {
+			validation = alpm_list_add(validation, _("None"));
+		} else {
+			if(v & ALPM_PKG_VALIDATION_MD5SUM) {
+				validation = alpm_list_add(validation, _("MD5 Sum"));
+			}
+			if(v & ALPM_PKG_VALIDATION_SHA256SUM) {
+				validation = alpm_list_add(validation, _("SHA-256 Sum"));
+			}
+			if(v & ALPM_PKG_VALIDATION_SIGNATURE) {
+				validation = alpm_list_add(validation, _("Signature"));
+			}
+		}
+	} else {
+		validation = alpm_list_add(validation, _("Unknown"));
+	}
+
+	if(extra || from == ALPM_PKG_FROM_LOCALDB) {
+		/* compute this here so we don't get a pause in the middle of output */
+		requiredby = alpm_pkg_compute_requiredby(pkg);
+		optionalfor = alpm_pkg_compute_optionalfor(pkg);
+	}
+
+	cols = getcols();
+
+	/* actual output */
+	if(from == ALPM_PKG_FROM_SYNCDB) {
+		string_display(titles[T_REPOSITORY],
+				alpm_db_get_name(alpm_pkg_get_db(pkg)), cols);
+	}
+	string_display(titles[T_NAME], alpm_pkg_get_name(pkg), cols);
+	string_display(titles[T_VERSION], alpm_pkg_get_version(pkg), cols);
+	string_display(titles[T_DESCRIPTION], alpm_pkg_get_desc(pkg), cols);
+	string_display(titles[T_ARCHITECTURE], alpm_pkg_get_arch(pkg), cols);
+	string_display(titles[T_URL], alpm_pkg_get_url(pkg), cols);
+	list_display(titles[T_LICENSES], alpm_pkg_get_licenses(pkg), cols);
+	list_display(titles[T_GROUPS], alpm_pkg_get_groups(pkg), cols);
+	deplist_display(titles[T_PROVIDES], alpm_pkg_get_provides(pkg), cols);
+	deplist_display(titles[T_DEPENDS_ON], alpm_pkg_get_depends(pkg), cols);
+	optdeplist_display(pkg, cols);
+
+	if(extra || from == ALPM_PKG_FROM_LOCALDB) {
+		list_display(titles[T_REQUIRED_BY], requiredby, cols);
+		list_display(titles[T_OPTIONAL_FOR], optionalfor, cols);
+	}
+	deplist_display(titles[T_CONFLICTS_WITH], alpm_pkg_get_conflicts(pkg), cols);
+	deplist_display(titles[T_REPLACES], alpm_pkg_get_replaces(pkg), cols);
+
+	size = humanize_size(alpm_pkg_get_size(pkg), '\0', 2, &label);
+	if(from == ALPM_PKG_FROM_SYNCDB) {
+		printf("%s%s%s %.2f %s\n", config->colstr.title, titles[T_DOWNLOAD_SIZE],
+			config->colstr.nocolor, size, label);
+	} else if(from == ALPM_PKG_FROM_FILE) {
+		printf("%s%s%s %.2f %s\n", config->colstr.title, titles[T_COMPRESSED_SIZE],
+			config->colstr.nocolor, size, label);
+	} else {
+		/* autodetect size for "Installed Size" */
+		label = "\0";
+	}
+
+	size = humanize_size(alpm_pkg_get_isize(pkg), label[0], 2, &label);
+	printf("%s%s%s %.2f %s\n", config->colstr.title, titles[T_INSTALLED_SIZE],
+			config->colstr.nocolor, size, label);
+
+	string_display(titles[T_PACKAGER], alpm_pkg_get_packager(pkg), cols);
+	string_display(titles[T_BUILD_DATE], bdatestr, cols);
+	if(from == ALPM_PKG_FROM_LOCALDB) {
+		string_display(titles[T_INSTALL_DATE], idatestr, cols);
+		string_display(titles[T_INSTALL_REASON], reason, cols);
+	}
+	if(from == ALPM_PKG_FROM_FILE || from == ALPM_PKG_FROM_LOCALDB) {
+		string_display(titles[T_INSTALL_SCRIPT],
+				alpm_pkg_has_scriptlet(pkg) ? _("Yes") : _("No"), cols);
+	}
+
+	if(from == ALPM_PKG_FROM_SYNCDB && extra) {
+		const char *base64_sig = alpm_pkg_get_base64_sig(pkg);
+		alpm_list_t *keys = NULL;
+		if(base64_sig) {
+			unsigned char *decoded_sigdata = NULL;
+			size_t data_len;
+			alpm_decode_signature(base64_sig, &decoded_sigdata, &data_len);
+			alpm_extract_keyid(config->handle, alpm_pkg_get_name(pkg),
+					decoded_sigdata, data_len, &keys);
+			free(decoded_sigdata);
+		} else {
+			keys = alpm_list_add(keys, _("None"));
+		}
+
+		string_display(titles[T_MD5_SUM], alpm_pkg_get_md5sum(pkg), cols);
+		string_display(titles[T_SHA_256_SUM], alpm_pkg_get_sha256sum(pkg), cols);
+		list_display(titles[T_SIGNATURES], keys, cols);
+
+		if(base64_sig) {
+			FREELIST(keys);
+		}
+	} else {
+		list_display(titles[T_VALIDATED_BY], validation, cols);
+	}
+
+	if(from == ALPM_PKG_FROM_FILE) {
+		alpm_siglist_t siglist;
+		int err = alpm_pkg_check_pgp_signature(pkg, &siglist);
+		if(err && alpm_errno(config->handle) == ALPM_ERR_SIG_MISSING) {
+			string_display(titles[T_SIGNATURES], _("None"), cols);
+		} else if(err) {
+			string_display(titles[T_SIGNATURES],
+					alpm_strerror(alpm_errno(config->handle)), cols);
+		} else {
+			signature_display(titles[T_SIGNATURES], &siglist, cols);
+		}
+		alpm_siglist_cleanup(&siglist);
+	}
+
+	/* Print additional package info if info flag passed more than once */
+	if(from == ALPM_PKG_FROM_LOCALDB && extra) {
+		dump_pkg_backups(pkg, cols);
+	}
+
+	/* final newline to separate packages */
+	printf("\n");
+
+	FREELIST(requiredby);
+	FREELIST(optionalfor);
+	alpm_list_free(validation);
+}
+
+/* Display list of backup files and their modification states
+ */
+void dump_pkg_backups(alpm_pkg_t *pkg, unsigned short cols)
+{
+	alpm_list_t *i, *text = NULL;
+	const char *root = alpm_option_get_root(config->handle);
+	/* package has backup files, so print them */
+	for(i = alpm_pkg_get_backup(pkg); i; i = alpm_list_next(i)) {
+		const alpm_backup_t *backup = i->data;
+		const char *value;
+		char *line;
+		size_t needed;
+		if(!backup->hash) {
+			continue;
+		}
+		value = get_backup_file_status(root, backup);
+		needed = strlen(root) + strlen(backup->name) + 1 + strlen(value) + 1;
+		line = malloc(needed);
+		if(!line) {
+			goto cleanup;
+		}
+		sprintf(line, "%s%s %s", root, backup->name, value);
+		text = alpm_list_add(text, line);
+	}
+
+	list_display_linebreak(titles[T_BACKUP_FILES], text, cols);
+
+cleanup:
+	FREELIST(text);
+}
+
+/* List all files contained in a package
+ */
+void dump_pkg_files(alpm_pkg_t *pkg, int quiet)
+{
+	const char *pkgname, *root;
+	alpm_filelist_t *pkgfiles;
+	size_t i;
+
+	pkgname = alpm_pkg_get_name(pkg);
+	pkgfiles = alpm_pkg_get_files(pkg);
+	root = alpm_option_get_root(config->handle);
+
+	for(i = 0; i < pkgfiles->count; i++) {
+		const alpm_file_t *file = pkgfiles->files + i;
+		/* Regular: '<pkgname> <root><filepath>\n'
+		 * Quiet  : '<root><filepath>\n'
+		 */
+		if(!quiet) {
+			printf("%s%s%s ", config->colstr.title, pkgname, config->colstr.nocolor);
+		}
+		printf("%s%s\n", root, file->name);
+	}
+
+	fflush(stdout);
+}
+
+/* Display the changelog of a package
+ */
+void dump_pkg_changelog(alpm_pkg_t *pkg)
+{
+	void *fp = NULL;
+
+	if((fp = alpm_pkg_changelog_open(pkg)) == NULL) {
+		pm_printf(ALPM_LOG_ERROR, _("no changelog available for '%s'.\n"),
+				alpm_pkg_get_name(pkg));
+		return;
+	} else {
+		fprintf(stdout, _("Changelog for %s:\n"), alpm_pkg_get_name(pkg));
+		/* allocate a buffer to get the changelog back in chunks */
+		char buf[CLBUF_SIZE];
+		size_t ret = 0;
+		while((ret = alpm_pkg_changelog_read(buf, CLBUF_SIZE, pkg, fp))) {
+			fwrite(buf, 1, ret, stdout);
+		}
+		alpm_pkg_changelog_close(pkg, fp);
+		putchar('\n');
+	}
 }
 
 //MAIN FUNCTIONS (FROM PACMAN.C)

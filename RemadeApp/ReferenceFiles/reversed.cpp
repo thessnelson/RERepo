@@ -543,7 +543,7 @@ void list_display_linebreak(char* field, alpm_list_t* list) {
 }
 // CHECK.C SECTION OF THE CODE //
 
-//Calcs a checksum, which is a direct reference to check.c
+//Calcs a checksum, which is a direct reference to package.c
 int get_backup_file_status(alpm_list_t* val, char* cs) {
     char *__s1;
     char buf [4104];
@@ -754,6 +754,7 @@ void dump_pkg_changelog(pmpkg_t* pkg_data) {
     }
 }
 
+//CANT FIND THIS ONE FOR SOME REASON
 void dump_pkg_sync(pmpkg_t* pkg_data, pmdb_t* db) {
     if (pkg_data != 0) {
         string_display(gettext("Repository     :"), alpm_pkg_get_name(pkg_data));

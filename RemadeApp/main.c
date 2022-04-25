@@ -87,6 +87,7 @@ void version() {
     puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*/\n");
 }
 
+
 //MAIN FUNCTIONS (FROM PACMAN.C)
 char* mbasename(char* input) {
     return strrchr(input, '/');
@@ -234,4 +235,349 @@ static void usage(int op, const char * const myname)
 	}
 	alpm_list_free(list);
 #undef addlist
+}
+
+/** Helper function for parsing operation from command-line arguments.
+ * @param opt Keycode returned by getopt_long
+ * @param dryrun If nonzero, application state is NOT changed
+ * @return 0 if opt was handled, 1 if it was not handled
+ */
+static int parsearg_op(int opt, int dryrun)
+{
+	switch(opt) {
+		/* operations */
+		case 'D':
+			if(dryrun) break;
+			config->op = (config->op != PM_OP_MAIN ? 0 : PM_OP_DATABASE); break;
+		case 'F':
+			if(dryrun) break;
+			config->op = (config->op != PM_OP_MAIN ? 0 : PM_OP_FILES); break;
+		case 'Q':
+			if(dryrun) break;
+			config->op = (config->op != PM_OP_MAIN ? 0 : PM_OP_QUERY); break;
+		case 'R':
+			if(dryrun) break;
+			config->op = (config->op != PM_OP_MAIN ? 0 : PM_OP_REMOVE); break;
+		case 'S':
+			if(dryrun) break;
+			config->op = (config->op != PM_OP_MAIN ? 0 : PM_OP_SYNC); break;
+		case 'T':
+			if(dryrun) break;
+			config->op = (config->op != PM_OP_MAIN ? 0 : PM_OP_DEPTEST); break;
+		case 'U':
+			if(dryrun) break;
+			config->op = (config->op != PM_OP_MAIN ? 0 : PM_OP_UPGRADE); break;
+		case 'V':
+			if(dryrun) break;
+			config->version = 1; break;
+		case 'h':
+			if(dryrun) break;
+			config->help = 1; break;
+		default:
+			return 1;
+	}
+	return 0;
+}
+
+static int parsearg_query(int opt)
+{
+	switch(opt) {
+		case OP_CHANGELOG:
+		case 'c':
+			config->op_q_changelog = 1;
+			break;
+		case OP_DEPS:
+		case 'd':
+			config->op_q_deps = 1;
+			break;
+		case OP_EXPLICIT:
+		case 'e':
+			config->op_q_explicit = 1;
+			break;
+		case OP_GROUPS:
+		case 'g':
+			(config->group)++;
+			break;
+		case OP_INFO:
+		case 'i':
+			(config->op_q_info)++;
+			break;
+		case OP_CHECK:
+		case 'k':
+			(config->op_q_check)++;
+			break;
+		case OP_LIST:
+		case 'l':
+			config->op_q_list = 1;
+			break;
+		case OP_FOREIGN:
+		case 'm':
+			config->op_q_locality |= PKG_LOCALITY_FOREIGN;
+			break;
+		case OP_NATIVE:
+		case 'n':
+			config->op_q_locality |= PKG_LOCALITY_NATIVE;
+			break;
+		case OP_OWNS:
+		case 'o':
+			config->op_q_owns = 1;
+			break;
+		case OP_FILE:
+		case 'p':
+			config->op_q_isfile = 1;
+			break;
+		case OP_QUIET:
+		case 'q':
+			config->quiet = 1;
+			break;
+		case OP_SEARCH:
+		case 's':
+			config->op_q_search = 1;
+			break;
+		case OP_UNREQUIRED:
+		case 't':
+			(config->op_q_unrequired)++;
+			break;
+		case OP_UPGRADES:
+		case 'u':
+			config->op_q_upgrade = 1;
+			break;
+		default:
+			return 1;
+	}
+	return 0;
+}
+
+static int parsearg_sync(int opt)
+{
+	if(parsearg_upgrade(opt) == 0) {
+		return 0;
+	}
+	switch(opt) {
+		case OP_CLEAN:
+		case 'c':
+			(config->op_s_clean)++;
+			break;
+		case OP_GROUPS:
+		case 'g':
+			(config->group)++;
+			break;
+		case OP_INFO:
+		case 'i':
+			(config->op_s_info)++;
+			break;
+		case OP_LIST:
+		case 'l':
+			config->op_q_list = 1;
+			break;
+		case OP_QUIET:
+		case 'q':
+			config->quiet = 1;
+			break;
+		case OP_SEARCH:
+		case 's':
+			config->op_s_search = 1;
+			break;
+		case OP_SYSUPGRADE:
+		case 'u':
+			(config->op_s_upgrade)++;
+			break;
+		case OP_REFRESH:
+		case 'y':
+			(config->op_s_sync)++;
+			break;
+		default:
+			return 1;
+	}
+	return 0;
+}
+
+static int parseargs(int argc, char *argv[])
+{
+	int opt;
+	int option_index = 0;
+	int result;
+	const char *optstring = "DFQRSTUVb:cdefghiklmnopqr:stuvwxy";
+	static const struct option opts[] =
+	{
+		{"database",   no_argument,       0, 'D'},
+		{"files",      no_argument,       0, 'F'},
+		{"query",      no_argument,       0, 'Q'},
+		{"remove",     no_argument,       0, 'R'},
+		{"sync",       no_argument,       0, 'S'},
+		{"deptest",    no_argument,       0, 'T'}, /* used by makepkg */
+		{"upgrade",    no_argument,       0, 'U'},
+		{"version",    no_argument,       0, 'V'},
+		{"help",       no_argument,       0, 'h'},
+
+		{"dbpath",     required_argument, 0, OP_DBPATH},
+		{"cascade",    no_argument,       0, OP_CASCADE},
+		{"changelog",  no_argument,       0, OP_CHANGELOG},
+		{"clean",      no_argument,       0, OP_CLEAN},
+		{"nodeps",     no_argument,       0, OP_NODEPS},
+		{"deps",       no_argument,       0, OP_DEPS},
+		{"explicit",   no_argument,       0, OP_EXPLICIT},
+		{"groups",     no_argument,       0, OP_GROUPS},
+		{"info",       no_argument,       0, OP_INFO},
+		{"check",      no_argument,       0, OP_CHECK},
+		{"list",       no_argument,       0, OP_LIST},
+		{"foreign",    no_argument,       0, OP_FOREIGN},
+		{"native",     no_argument,       0, OP_NATIVE},
+		{"nosave",     no_argument,       0, OP_NOSAVE},
+		{"owns",       no_argument,       0, OP_OWNS},
+		{"file",       no_argument,       0, OP_FILE},
+		{"print",      no_argument,       0, OP_PRINT},
+		{"quiet",      no_argument,       0, OP_QUIET},
+		{"root",       required_argument, 0, OP_ROOT},
+		{"sysroot",    required_argument, 0, OP_SYSROOT},
+		{"recursive",  no_argument,       0, OP_RECURSIVE},
+		{"search",     no_argument,       0, OP_SEARCH},
+		{"regex",      no_argument,       0, OP_REGEX},
+		{"machinereadable",      no_argument,       0, OP_MACHINEREADABLE},
+		{"unrequired", no_argument,       0, OP_UNREQUIRED},
+		{"upgrades",   no_argument,       0, OP_UPGRADES},
+		{"sysupgrade", no_argument,       0, OP_SYSUPGRADE},
+		{"unneeded",   no_argument,       0, OP_UNNEEDED},
+		{"verbose",    no_argument,       0, OP_VERBOSE},
+		{"downloadonly", no_argument,     0, OP_DOWNLOADONLY},
+		{"refresh",    no_argument,       0, OP_REFRESH},
+		{"noconfirm",  no_argument,       0, OP_NOCONFIRM},
+		{"confirm",    no_argument,       0, OP_CONFIRM},
+		{"config",     required_argument, 0, OP_CONFIG},
+		{"ignore",     required_argument, 0, OP_IGNORE},
+		{"assume-installed",     required_argument, 0, OP_ASSUMEINSTALLED},
+		{"debug",      optional_argument, 0, OP_DEBUG},
+		{"force",      no_argument,       0, OP_FORCE},
+		{"overwrite",  required_argument, 0, OP_OVERWRITE_FILES},
+		{"noprogressbar", no_argument,    0, OP_NOPROGRESSBAR},
+		{"noscriptlet", no_argument,      0, OP_NOSCRIPTLET},
+		{"ask",        required_argument, 0, OP_ASK},
+		{"cachedir",   required_argument, 0, OP_CACHEDIR},
+		{"hookdir",    required_argument, 0, OP_HOOKDIR},
+		{"asdeps",     no_argument,       0, OP_ASDEPS},
+		{"logfile",    required_argument, 0, OP_LOGFILE},
+		{"ignoregroup", required_argument, 0, OP_IGNOREGROUP},
+		{"needed",     no_argument,       0, OP_NEEDED},
+		{"asexplicit",     no_argument,   0, OP_ASEXPLICIT},
+		{"arch",       required_argument, 0, OP_ARCH},
+		{"print-format", required_argument, 0, OP_PRINTFORMAT},
+		{"gpgdir",     required_argument, 0, OP_GPGDIR},
+		{"dbonly",     no_argument,       0, OP_DBONLY},
+		{"color",      required_argument, 0, OP_COLOR},
+		{"disable-download-timeout", no_argument, 0, OP_DISABLEDLTIMEOUT},
+		{0, 0, 0, 0}
+	};
+
+	/* parse operation */
+	while((opt = getopt_long(argc, argv, optstring, opts, &option_index)) != -1) {
+		if(opt == 0) {
+			continue;
+		} else if(opt == '?') {
+			/* unknown option, getopt printed an error */
+			return 1;
+		}
+		parsearg_op(opt, 0);
+	}
+
+	if(config->op == 0) {
+		pm_printf(ALPM_LOG_ERROR, _("only one operation may be used at a time\n"));
+		return 1;
+	}
+	if(config->help) {
+		usage(config->op, mbasename(argv[0]));
+		cleanup(0);
+	}
+	if(config->version) {
+		version();
+		cleanup(0);
+	}
+
+	/* parse all other options */
+	optind = 1;
+	while((opt = getopt_long(argc, argv, optstring, opts, &option_index)) != -1) {
+		if(opt == 0) {
+			continue;
+		} else if(opt == '?') {
+			/* this should have failed during first pass already */
+			return 1;
+		} else if(parsearg_op(opt, 1) == 0) {
+			/* opt is an operation */
+			continue;
+		}
+
+		switch(config->op) {
+			case PM_OP_DATABASE:
+				result = parsearg_database(opt);
+				break;
+			case PM_OP_QUERY:
+				result = parsearg_query(opt);
+				break;
+			case PM_OP_REMOVE:
+				result = parsearg_remove(opt);
+				break;
+			case PM_OP_SYNC:
+				result = parsearg_sync(opt);
+				break;
+			case PM_OP_UPGRADE:
+				result = parsearg_upgrade(opt);
+				break;
+			case PM_OP_FILES:
+				result = parsearg_files(opt);
+				break;
+			case PM_OP_DEPTEST:
+			default:
+				result = 1;
+				break;
+		}
+		if(result == 0) {
+			continue;
+		}
+
+		/* fall back to global options */
+		result = parsearg_global(opt);
+		if(result != 0) {
+			/* global option parsing failed, abort */
+			if(opt < OP_LONG_FLAG_MIN) {
+				pm_printf(ALPM_LOG_ERROR, _("invalid option '-%c'\n"), opt);
+			} else {
+				pm_printf(ALPM_LOG_ERROR, _("invalid option '--%s'\n"),
+						opts[option_index].name);
+			}
+			return result;
+		}
+	}
+
+	while(optind < argc) {
+		/* add the target to our target array */
+		pm_targets = alpm_list_add(pm_targets, strdup(argv[optind]));
+		optind++;
+	}
+
+	switch(config->op) {
+		case PM_OP_DATABASE:
+			checkargs_database();
+			break;
+		case PM_OP_DEPTEST:
+			/* no conflicting options */
+			break;
+		case PM_OP_SYNC:
+			checkargs_sync();
+			break;
+		case PM_OP_QUERY:
+			checkargs_query();
+			break;
+		case PM_OP_REMOVE:
+			checkargs_remove();
+			break;
+		case PM_OP_UPGRADE:
+			checkargs_upgrade();
+			break;
+		case PM_OP_FILES:
+			checkargs_files();
+			break;
+		default:
+			break;
+	}
+
+	return 0;
 }

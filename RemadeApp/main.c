@@ -2094,7 +2094,7 @@ static int sync_cleandb_all(void)
 	}
 	printf(_("removing unused sync repositories...\n"));
 
-	if (asprintf(&syncdbpath, "%s%s", dbpath, "sync/") < 0)
+	if (vsprintf(&syncdbpath, "%s%s", dbpath, "sync/") < 0) //implicit declaration of asprintf. Did you mean vsprintf?
 	{
 		ret += 1;
 		return ret;

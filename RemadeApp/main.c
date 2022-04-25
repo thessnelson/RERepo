@@ -45,11 +45,11 @@
 #include <alpm.h>
 #include <alpm_list.h>
 
-//I HAVE PASTED UP TO LINE 839!!
-
-//INTRO FILES (FROM TESTPKG.C)
+//I HAVE PASTED UP TO LINE ___!!!
+//SYNC_SYNCTREE IS FROM THE ORIGINAL FILE BC I CANT FIND IT
 
 //UTILITY FILES (FROM UTIL.C)
+//Might be better off with the reversed.cpp version.
 int needs_root(void)
 {
 	if(config->sysroot) {
@@ -289,7 +289,348 @@ void list_display_linebreak(const char *title, const alpm_list_t *list,
 	}
 }
 
+void display_optdepends(alpm_pkg_t *pkg)
+{
+	alpm_list_t *i, *optdeps, *optstrings = NULL;
+
+	optdeps = alpm_pkg_get_optdepends(pkg);
+
+	/* turn optdepends list into a text list */
+	for(i = optdeps; i; i = alpm_list_next(i)) {
+		alpm_depend_t *optdep = i->data;
+		optstrings = alpm_list_add(optstrings, make_optstring(optdep));
+	}
+
+	if(optstrings) {
+		printf(_("Optional dependencies for %s\n"), alpm_pkg_get_name(pkg));
+		unsigned short cols = getcols();
+		list_display_linebreak("   ", optstrings, cols);
+	}
+
+	FREELIST(optstrings);
+}
+
+static void display_repo_list(const char *dbname, alpm_list_t *list,
+		unsigned short cols)
+{
+	const char *prefix = "  ";
+	const colstr_t *colstr = &config->colstr;
+
+	colon_printf(_("Repository %s%s\n"), colstr->repo, dbname);
+	list_display(prefix, list, cols);
+}
+
+void select_display(const alpm_list_t *pkglist)
+{
+	const alpm_list_t *i;
+	int nth = 1;
+	alpm_list_t *list = NULL;
+	char *string = NULL;
+	const char *dbname = NULL;
+	unsigned short cols = getcols();
+
+	for(i = pkglist; i; i = i->next) {
+		alpm_pkg_t *pkg = i->data;
+		alpm_db_t *db = alpm_pkg_get_db(pkg);
+
+		if(!dbname) {
+			dbname = alpm_db_get_name(db);
+		}
+		if(strcmp(alpm_db_get_name(db), dbname) != 0) {
+			display_repo_list(dbname, list, cols);
+			FREELIST(list);
+			dbname = alpm_db_get_name(db);
+		}
+		string = NULL;
+		pm_asprintf(&string, "%d) %s", nth, alpm_pkg_get_name(pkg));
+		list = alpm_list_add(list, string);
+		nth++;
+	}
+	display_repo_list(dbname, list, cols);
+	FREELIST(list);
+}
+
+/* discard unhandled input on the terminal's input buffer */
+static int flush_term_input(int fd)
+{
+#ifdef HAVE_TCFLUSH
+	if(isatty(fd)) {
+		return tcflush(fd, TCIFLUSH);
+	}
+#endif
+	/* fail silently */
+	return 0;
+}
+
+static int parseindex(char *s, int *val, int min, int max)
+{
+	char *endptr = NULL;
+	int n = strtol(s, &endptr, 10);
+	if(*endptr == '\0') {
+		if(n < min || n > max) {
+			pm_printf(ALPM_LOG_ERROR,
+					_("invalid value: %d is not between %d and %d\n"),
+					n, min, max);
+			return -1;
+		}
+		*val = n;
+		return 0;
+	} else {
+		pm_printf(ALPM_LOG_ERROR, _("invalid number: %s\n"), s);
+		return -1;
+	}
+}
+
+int select_question(int count)
+{
+	char response[32];
+	FILE *stream;
+	int preset = 1;
+
+	if(config->noconfirm) {
+		stream = stdout;
+	} else {
+		/* Use stderr so questions are always displayed when redirecting output */
+		stream = stderr;
+	}
+
+	while(1) {
+		fprintf(stream, "\n");
+		fprintf(stream, _("Enter a number (default=%d)"), preset);
+		fprintf(stream, ": ");
+		fflush(stream);
+
+		if(config->noconfirm) {
+			fprintf(stream, "\n");
+			break;
+		}
+
+		flush_term_input(fileno(stdin));
+
+		if(safe_fgets_stdin(response, sizeof(response))) {
+			size_t len = strtrim(response);
+			if(len > 0) {
+				int n;
+				if(parseindex(response, &n, 1, count) != 0) {
+					continue;
+				}
+				return (n - 1);
+			}
+		}
+		break;
+	}
+
+	return (preset - 1);
+}
+
+//question from reversed.cpp
+/* presents a prompt and gets a Y/N answer */
+__attribute__((format(printf, 2, 0)))
+static int question(short preset, const char *format, va_list args)
+{
+	char response[32];
+	FILE *stream;
+	int fd_in = fileno(stdin);
+
+	if(config->noconfirm) {
+		stream = stdout;
+	} else {
+		/* Use stderr so questions are always displayed when redirecting output */
+		stream = stderr;
+	}
+
+	/* ensure all text makes it to the screen before we prompt the user */
+	fflush(stdout);
+	fflush(stderr);
+
+	fputs(config->colstr.colon, stream);
+	vfprintf(stream, format, args);
+
+	if(preset) {
+		fprintf(stream, " %s ", _("[Y/n]"));
+	} else {
+		fprintf(stream, " %s ", _("[y/N]"));
+	}
+
+	fputs(config->colstr.nocolor, stream);
+	fflush(stream);
+
+	if(config->noconfirm) {
+		fprintf(stream, "\n");
+		return preset;
+	}
+
+	flush_term_input(fd_in);
+
+	if(safe_fgets_stdin(response, sizeof(response))) {
+		size_t len = strtrim(response);
+		if(len == 0) {
+			return preset;
+		}
+
+		/* if stdin is piped, response does not get printed out, and as a result
+		 * a \n is missing, resulting in broken output */
+		if(!isatty(fd_in)) {
+			fprintf(stream, "%s\n", response);
+		}
+
+		if(mbscasecmp(response, _("Y")) == 0 || mbscasecmp(response, _("YES")) == 0) {
+			return 1;
+		} else if(mbscasecmp(response, _("N")) == 0 || mbscasecmp(response, _("NO")) == 0) {
+			return 0;
+		}
+	}
+	return 0;
+}
+
+int yesno(const char *format, ...)
+{
+	int ret;
+	va_list args;
+
+	va_start(args, format);
+	ret = question(1, format, args);
+	va_end(args);
+
+	return ret;
+}
+
+int noyes(const char *format, ...)
+{
+	int ret;
+	va_list args;
+
+	va_start(args, format);
+	ret = question(0, format, args);
+	va_end(args);
+
+	return ret;
+}
+
+int trans_init(int flags, int check_valid)
+{
+	int ret;
+
+	check_syncdbs(0, check_valid);
+
+	ret = alpm_trans_init(config->handle, flags);
+	if(ret == -1) {
+		trans_init_error();
+		return -1;
+	}
+	return 0;
+}
+
+/* does the same thing as 'rm -rf' */
+int rmrf(const char *path)
+{
+	int errflag = 0;
+	struct dirent *dp;
+	DIR *dirp;
+
+	if(!unlink(path)) {
+		return 0;
+	} else {
+		switch(errno) {
+		case ENOENT:
+			return 0;
+		case EPERM:
+		case EISDIR:
+			break;
+		default:
+			/* not a directory */
+			return 1;
+		}
+
+		dirp = opendir(path);
+		if(!dirp) {
+			return 1;
+		}
+		for(dp = readdir(dirp); dp != NULL; dp = readdir(dirp)) {
+			if(strcmp(dp->d_name, "..") != 0 && strcmp(dp->d_name, ".") != 0) {
+				char name[PATH_MAX];
+				snprintf(name, PATH_MAX, "%s/%s", path, dp->d_name);
+				errflag += rmrf(name);
+			}
+		}
+		closedir(dirp);
+		if(rmdir(path)) {
+			errflag++;
+		}
+		return errflag;
+	}
+}
+
 //MORE UTILITY FILES (FROM UTIL-COMMON)
+/** Parse the dirname of a program from a path.
+* The path returned should be freed.
+* @param path path to parse dirname from
+*
+* @return everything preceding the final '/'
+*/
+char *mdirname(const char *path)
+{
+	char *ret, *last;
+
+	/* null or empty path */
+	if(path == NULL || *path == '\0') {
+		return strdup(".");
+	}
+
+	if((ret = strdup(path)) == NULL) {
+		return NULL;
+	}
+
+	last = strrchr(ret, '/');
+
+	if(last != NULL) {
+		/* we found a '/', so terminate our string */
+		if(last == ret) {
+			/* return "/" for root */
+			last++;
+		}
+		*last = '\0';
+		return ret;
+	}
+
+	/* no slash found */
+	free(ret);
+	return strdup(".");
+}
+/* Trim whitespace and newlines from a string
+ */
+size_t strtrim(char *str)
+{
+	char *end, *pch = str;
+
+	if(str == NULL || *str == '\0') {
+		/* string is empty, so we're done. */
+		return 0;
+	}
+
+	while(isspace((unsigned char)*pch)) {
+		pch++;
+	}
+	if(pch != str) {
+		size_t len = strlen(pch);
+		/* check if there wasn't anything but whitespace in the string. */
+		if(len == 0) {
+			*str = '\0';
+			return 0;
+		}
+		memmove(str, pch, len + 1);
+		pch = str;
+	}
+
+	end = (str + strlen(str) - 1);
+	while(isspace((unsigned char)*end)) {
+		end--;
+	}
+	*++end = '\0';
+
+	return end - pch;
+}
+
 
 //CONFIGURATION FILES (FROM CONF.C)
 config_t *config_new(void)
@@ -410,7 +751,476 @@ static int display(alpm_pkg_t *pkg)
 	return ret;
 }
 
+//resolve_path from reversed.cpp
+/** Resolve the canonicalized absolute path of a symlink.
+ * @param path path to resolve
+ * @param resolved_path destination for the resolved path, will be malloc'd if
+ * NULL
+ * @return the resolved path
+ */
+static char *lrealpath(const char *path, char *resolved_path)
+{
+	const char *bname = mbasename(path);
+	char *rpath = NULL, *dname = NULL;
+	int success = 0;
+
+	if(strcmp(bname, ".") == 0 || strcmp(bname, "..") == 0) {
+		/* the entire path needs to be resolved */
+		return realpath(path, resolved_path);
+	}
+
+	if(!(dname = mdirname(path))) {
+		goto cleanup;
+	}
+	if(!(rpath = realpath(dname, NULL))) {
+		goto cleanup;
+	}
+	if(!resolved_path) {
+		if(!(resolved_path = malloc(strlen(rpath) + strlen(bname) + 2))) {
+			goto cleanup;
+		}
+	}
+
+	strcpy(resolved_path, rpath);
+	if(resolved_path[strlen(resolved_path) - 1] != '/') {
+		strcat(resolved_path, "/");
+	}
+	strcat(resolved_path, bname);
+	success = 1;
+
+cleanup:
+	free(dname);
+	free(rpath);
+
+	return (success ? resolved_path : NULL);
+}
+
+static void print_query_fileowner(const char *filename, alpm_pkg_t *info)
+{
+	if(!config->quiet) {
+		const colstr_t *colstr = &config->colstr;
+		printf(_("%s is owned by %s%s %s%s%s\n"), filename, colstr->title,
+				alpm_pkg_get_name(info), colstr->version, alpm_pkg_get_version(info),
+				colstr->nocolor);
+	} else {
+		printf("%s\n", alpm_pkg_get_name(info));
+	}
+}
+
+static int query_fileowner(alpm_list_t *targets)
+{
+	int ret = 0;
+	const char *root = alpm_option_get_root(config->handle);
+	size_t rootlen = strlen(root);
+	alpm_list_t *t;
+	alpm_db_t *db_local;
+	alpm_list_t *packages;
+
+	/* This code is here for safety only */
+	if(targets == NULL) {
+		pm_printf(ALPM_LOG_ERROR, _("no file was specified for --owns\n"));
+		return 1;
+	}
+
+	db_local = alpm_get_localdb(config->handle);
+	packages = alpm_db_get_pkgcache(db_local);
+
+	for(t = targets; t; t = alpm_list_next(t)) {
+		char *filename = NULL;
+		char rpath[PATH_MAX], *rel_path;
+		struct stat buf;
+		alpm_list_t *i;
+		size_t len;
+		unsigned int found = 0;
+		int is_dir = 0, is_missing = 0;
+
+		if((filename = strdup(t->data)) == NULL) {
+			goto targcleanup;
+		}
+
+		if(strcmp(filename, "") == 0) {
+			pm_printf(ALPM_LOG_ERROR, _("empty string passed to file owner query\n"));
+			goto targcleanup;
+		}
+
+		/* trailing '/' causes lstat to dereference directory symlinks */
+		len = strlen(filename) - 1;
+		while(len > 0 && filename[len] == '/') {
+			filename[len--] = '\0';
+			/* If a non-dir file exists, S_ISDIR will correct this later. */
+			is_dir = 1;
+		}
+
+		if(lstat(filename, &buf) == -1) {
+			is_missing = 1;
+			/* if it is not a path but a program name, then check in PATH */
+			if ((strchr(filename, '/') == NULL) && (search_path(&filename, &buf) == 0)) {
+				is_missing = 0;
+			}
+		}
+
+		if(!lrealpath(filename, rpath)) {
+			/* Can't canonicalize path, try to proceed anyway */
+			strcpy(rpath, filename);
+		}
+
+		if(strncmp(rpath, root, rootlen) != 0) {
+			/* file is outside root, we know nothing can own it */
+			pm_printf(ALPM_LOG_ERROR, _("No package owns %s\n"), filename);
+			goto targcleanup;
+		}
+
+		rel_path = rpath + rootlen;
+
+		if((is_missing && is_dir) || (!is_missing && (is_dir = S_ISDIR(buf.st_mode)))) {
+			size_t rlen = strlen(rpath);
+			if(rlen + 2 >= PATH_MAX) {
+					pm_printf(ALPM_LOG_ERROR, _("path too long: %s/\n"), rpath);
+					goto targcleanup;
+			}
+			strcat(rpath + rlen, "/");
+		}
+
+		for(i = packages; i && (!found || is_dir); i = alpm_list_next(i)) {
+			if(alpm_filelist_contains(alpm_pkg_get_files(i->data), rel_path)) {
+				print_query_fileowner(rpath, i->data);
+				found = 1;
+			}
+		}
+		if(!found) {
+			pm_printf(ALPM_LOG_ERROR, _("No package owns %s\n"), filename);
+		}
+
+targcleanup:
+		if(!found) {
+			ret++;
+		}
+		free(filename);
+	}
+
+	return ret;
+}
+
+static int query_group(alpm_list_t *targets)
+{
+	alpm_list_t *i, *j;
+	const char *grpname = NULL;
+	int ret = 0;
+	alpm_db_t *db_local = alpm_get_localdb(config->handle);
+
+	if(targets == NULL) {
+		for(j = alpm_db_get_groupcache(db_local); j; j = alpm_list_next(j)) {
+			alpm_group_t *grp = j->data;
+			const alpm_list_t *p;
+
+			for(p = grp->packages; p; p = alpm_list_next(p)) {
+				alpm_pkg_t *pkg = p->data;
+				if(!filter(pkg)) {
+					continue;
+				}
+				printf("%s %s\n", grp->name, alpm_pkg_get_name(pkg));
+			}
+		}
+	} else {
+		for(i = targets; i; i = alpm_list_next(i)) {
+			alpm_group_t *grp;
+			grpname = i->data;
+			grp = alpm_db_get_group(db_local, grpname);
+			if(grp) {
+				const alpm_list_t *p;
+				for(p = grp->packages; p; p = alpm_list_next(p)) {
+					if(!filter(p->data)) {
+						continue;
+					}
+					if(!config->quiet) {
+						printf("%s %s\n", grpname,
+								alpm_pkg_get_name(p->data));
+					} else {
+						printf("%s\n", alpm_pkg_get_name(p->data));
+					}
+				}
+			} else {
+				pm_printf(ALPM_LOG_ERROR, _("group '%s' was not found\n"), grpname);
+				ret++;
+			}
+		}
+	}
+	return ret;
+}
+
+/* search the local database for a matching package */
+static int query_search(alpm_list_t *targets)
+{
+	alpm_db_t *db_local = alpm_get_localdb(config->handle);
+	int ret = dump_pkg_search(db_local, targets, 0);
+	if(ret == -1) {
+		alpm_errno_t err = alpm_errno(config->handle);
+		pm_printf(ALPM_LOG_ERROR, "search failed: %s\n", alpm_strerror(err));
+		return 1;
+	}
+
+	return ret;
+
+}
+
+//p_query in reversed.cpp
+int pacman_query(alpm_list_t *targets)
+{
+	int ret = 0;
+	int match = 0;
+	alpm_list_t *i;
+	alpm_pkg_t *pkg = NULL;
+	alpm_db_t *db_local;
+
+	/* First: operations that do not require targets */
+
+	/* search for a package */
+	if(config->op_q_search) {
+		ret = query_search(targets);
+		return ret;
+	}
+
+	/* looking for groups */
+	if(config->group) {
+		ret = query_group(targets);
+		return ret;
+	}
+
+	if(config->op_q_locality || config->op_q_upgrade) {
+		if(check_syncdbs(1, 1)) {
+			return 1;
+		}
+	}
+
+	db_local = alpm_get_localdb(config->handle);
+
+	/* operations on all packages in the local DB
+	 * valid: no-op (plain -Q), list, info, check
+	 * invalid: isfile, owns */
+	if(targets == NULL) {
+		if(config->op_q_isfile || config->op_q_owns) {
+			pm_printf(ALPM_LOG_ERROR, _("no targets specified (use -h for help)\n"));
+			return 1;
+		}
+
+		for(i = alpm_db_get_pkgcache(db_local); i; i = alpm_list_next(i)) {
+			pkg = i->data;
+			if(filter(pkg)) {
+				int value = display(pkg);
+				if(value != 0) {
+					ret = 1;
+				}
+				match = 1;
+			}
+		}
+		if(!match) {
+			ret = 1;
+		}
+		return ret;
+	}
+
+	/* Second: operations that require target(s) */
+
+	/* determine the owner of a file */
+	if(config->op_q_owns) {
+		ret = query_fileowner(targets);
+		return ret;
+	}
+
+	/* operations on named packages in the local DB
+	 * valid: no-op (plain -Q), list, info, check */
+	for(i = targets; i; i = alpm_list_next(i)) {
+		const char *strname = i->data;
+
+		/* strip leading part of "local/pkgname" */
+		if(strncmp(strname, LOCAL_PREFIX, strlen(LOCAL_PREFIX)) == 0) {
+			strname += strlen(LOCAL_PREFIX);
+		}
+
+		if(config->op_q_isfile) {
+			alpm_pkg_load(config->handle, strname, 1, 0, &pkg);
+
+			if(pkg == NULL) {
+				pm_printf(ALPM_LOG_ERROR,
+						_("could not load package '%s': %s\n"), strname,
+						alpm_strerror(alpm_errno(config->handle)));
+			}
+		} else {
+			pkg = alpm_db_get_pkg(db_local, strname);
+			if(pkg == NULL) {
+				pkg = alpm_find_satisfier(alpm_db_get_pkgcache(db_local), strname);
+			}
+
+			if(pkg == NULL) {
+				pm_printf(ALPM_LOG_ERROR,
+						_("package '%s' was not found\n"), strname);
+				if(!config->op_q_isfile && access(strname, R_OK) == 0) {
+					pm_printf(ALPM_LOG_WARNING,
+							_("'%s' is a file, you might want to use %s.\n"),
+							strname, "-p/--file");
+				}
+			}
+		}
+
+		if(pkg == NULL) {
+			ret = 1;
+			continue;
+		}
+
+		if(filter(pkg)) {
+			int value = display(pkg);
+			if(value != 0) {
+				ret = 1;
+			}
+			match = 1;
+		}
+
+		if(config->op_q_isfile) {
+			alpm_pkg_free(pkg);
+			pkg = NULL;
+		}
+	}
+
+	if(!match) {
+		ret = 1;
+	}
+
+	return ret;
+}
+
 //UPDATING FUNCTIONS (FROM SYNC.C)
+
+//cb_trans_conv in reversed.cpp
+int sync_prepare_execute(void)
+{
+	alpm_list_t *i, *packages, *data = NULL;
+	int retval = 0;
+
+	/* Step 2: "compute" the transaction based on targets and flags */
+	if(alpm_trans_prepare(config->handle, &data) == -1) {
+		alpm_errno_t err = alpm_errno(config->handle);
+		pm_printf(ALPM_LOG_ERROR, _("failed to prepare transaction (%s)\n"),
+		        alpm_strerror(err));
+		switch(err) {
+			case ALPM_ERR_PKG_INVALID_ARCH:
+				for(i = data; i; i = alpm_list_next(i)) {
+					char *pkg = i->data;
+					colon_printf(_("package %s does not have a valid architecture\n"), pkg);
+					free(pkg);
+				}
+				break;
+			case ALPM_ERR_UNSATISFIED_DEPS:
+				for(i = data; i; i = alpm_list_next(i)) {
+					print_broken_dep(i->data);
+					alpm_depmissing_free(i->data);
+				}
+				break;
+			case ALPM_ERR_CONFLICTING_DEPS:
+				for(i = data; i; i = alpm_list_next(i)) {
+					alpm_conflict_t *conflict = i->data;
+					/* only print reason if it contains new information */
+					if(conflict->reason->mod == ALPM_DEP_MOD_ANY) {
+						colon_printf(_("%s and %s are in conflict\n"),
+								conflict->package1, conflict->package2);
+					} else {
+						char *reason = alpm_dep_compute_string(conflict->reason);
+						colon_printf(_("%s and %s are in conflict (%s)\n"),
+								conflict->package1, conflict->package2, reason);
+						free(reason);
+					}
+					alpm_conflict_free(conflict);
+				}
+				break;
+			default:
+				break;
+		}
+		retval = 1;
+		goto cleanup;
+	}
+
+	packages = alpm_trans_get_add(config->handle);
+	if(packages == NULL) {
+		/* nothing to do: just exit without complaining */
+		if(!config->print) {
+			printf(_(" there is nothing to do\n"));
+		}
+		goto cleanup;
+	}
+
+	/* Step 3: actually perform the operation */
+	if(config->print) {
+		print_packages(packages);
+		goto cleanup;
+	}
+
+	display_targets();
+	printf("\n");
+
+	int confirm;
+	if(config->op_s_downloadonly) {
+		confirm = yesno(_("Proceed with download?"));
+	} else {
+		confirm = yesno(_("Proceed with installation?"));
+	}
+	if(!confirm) {
+		retval = 1;
+		goto cleanup;
+	}
+
+	multibar_move_completed_up(true);
+	if(alpm_trans_commit(config->handle, &data) == -1) {
+		alpm_errno_t err = alpm_errno(config->handle);
+		pm_printf(ALPM_LOG_ERROR, _("failed to commit transaction (%s)\n"),
+		        alpm_strerror(err));
+		switch(err) {
+			case ALPM_ERR_FILE_CONFLICTS:
+				for(i = data; i; i = alpm_list_next(i)) {
+					alpm_fileconflict_t *conflict = i->data;
+					switch(conflict->type) {
+						case ALPM_FILECONFLICT_TARGET:
+							fprintf(stderr, _("%s exists in both '%s' and '%s'\n"),
+									conflict->file, conflict->target, conflict->ctarget);
+							break;
+						case ALPM_FILECONFLICT_FILESYSTEM:
+							if(conflict->ctarget[0]) {
+								fprintf(stderr, _("%s: %s exists in filesystem (owned by %s)\n"),
+										conflict->target, conflict->file, conflict->ctarget);
+							} else {
+								fprintf(stderr, _("%s: %s exists in filesystem\n"),
+										conflict->target, conflict->file);
+							}
+							break;
+					}
+					alpm_fileconflict_free(conflict);
+				}
+				break;
+			case ALPM_ERR_PKG_INVALID:
+			case ALPM_ERR_PKG_INVALID_CHECKSUM:
+			case ALPM_ERR_PKG_INVALID_SIG:
+				for(i = data; i; i = alpm_list_next(i)) {
+					char *filename = i->data;
+					fprintf(stderr, _("%s is invalid or corrupted\n"), filename);
+					free(filename);
+				}
+				break;
+			default:
+				break;
+		}
+		/* TODO: stderr? */
+		printf(_("Errors occurred, no packages were upgraded.\n"));
+		retval = 1;
+		goto cleanup;
+	}
+
+	/* Step 4: release transaction resources */
+cleanup:
+	alpm_list_free(data);
+	if(trans_release() == -1) {
+		retval = 1;
+	}
+
+	return retval;
+}
 
 //Collected from reversed.cpp, not from sync.
 void dump_pkg_sync(pmpkg_t* pkg_data, pmdb_t* db) {
@@ -420,6 +1230,515 @@ void dump_pkg_sync(pmpkg_t* pkg_data, pmdb_t* db) {
     }
 
     return;
+}
+
+//Copied direct from reversed.cpp, not from sync.
+int sync_synctree(pmpkg_t* syncdb, int level) {
+    pmtransflag_t* flags;
+    int count = 0;
+    i = syncdb;
+
+    if (trans_init(flags) != -1) {
+        while (i != 0) {
+            int update_out = alpm_db_update(1 < level, syncdb);
+
+            if (update_out < 0) {
+                pm_fprintf(gettext("Error: Failed to update database %s. (%s)\n"), alpm_strerrorlast(), alpm_db_get_name(syncdb));
+            } else if (update_out == 1) {
+                char* db_name = alpm_db_get_name(syncdb);
+                printf((char *)gettext("The database %s is up to date.\n"),db_name);
+
+                count = count + 1;
+            } else {
+                count = count + 1;
+            }
+
+            i = alpm_list_next(i);
+        }
+
+        if (count == 0) {
+            pm_fprintf(gettext("Error: Could not sync any databases.\n"));
+        }
+    }
+
+    return count;
+}
+
+static int sync_list(alpm_list_t *syncs, alpm_list_t *targets)
+{
+	alpm_list_t *i, *j, *ls = NULL;
+	alpm_db_t *db_local = alpm_get_localdb(config->handle);
+	int ret = 0;
+
+	if(targets) {
+		for(i = targets; i; i = alpm_list_next(i)) {
+			const char *repo = i->data;
+			alpm_db_t *db = NULL;
+
+			for(j = syncs; j; j = alpm_list_next(j)) {
+				alpm_db_t *d = j->data;
+
+				if(strcmp(repo, alpm_db_get_name(d)) == 0) {
+					db = d;
+					break;
+				}
+			}
+
+			if(db == NULL) {
+				pm_printf(ALPM_LOG_ERROR,
+					_("repository \"%s\" was not found.\n"), repo);
+				ret = 1;
+			}
+
+			ls = alpm_list_add(ls, db);
+		}
+	} else {
+		ls = syncs;
+	}
+
+	for(i = ls; i; i = alpm_list_next(i)) {
+		alpm_db_t *db = i->data;
+
+		for(j = alpm_db_get_pkgcache(db); j; j = alpm_list_next(j)) {
+			alpm_pkg_t *pkg = j->data;
+
+			if(!config->quiet) {
+				const colstr_t *colstr = &config->colstr;
+				printf("%s%s %s%s %s%s%s", colstr->repo, alpm_db_get_name(db),
+						colstr->title, alpm_pkg_get_name(pkg),
+						colstr->version, alpm_pkg_get_version(pkg), colstr->nocolor);
+				print_installed(db_local, pkg);
+				printf("\n");
+			} else {
+				printf("%s\n", alpm_pkg_get_name(pkg));
+			}
+		}
+	}
+
+	if(targets) {
+		alpm_list_free(ls);
+	}
+
+	return ret;
+}
+
+static int sync_info(alpm_list_t *syncs, alpm_list_t *targets)
+{
+	alpm_list_t *i, *j, *k;
+	int ret = 0;
+
+	if(targets) {
+		for(i = targets; i; i = alpm_list_next(i)) {
+			const char *target = i->data;
+			char *name = strdup(target);
+			char *repo, *pkgstr;
+			int foundpkg = 0, founddb = 0;
+
+			pkgstr = strchr(name, '/');
+			if(pkgstr) {
+				repo = name;
+				*pkgstr = '\0';
+				++pkgstr;
+			} else {
+				repo = NULL;
+				pkgstr = name;
+			}
+
+			for(j = syncs; j; j = alpm_list_next(j)) {
+				alpm_db_t *db = j->data;
+				if(repo && strcmp(repo, alpm_db_get_name(db)) != 0) {
+					continue;
+				}
+				founddb = 1;
+
+				for(k = alpm_db_get_pkgcache(db); k; k = alpm_list_next(k)) {
+					alpm_pkg_t *pkg = k->data;
+
+					if(strcmp(alpm_pkg_get_name(pkg), pkgstr) == 0) {
+						dump_pkg_full(pkg, config->op_s_info > 1);
+						foundpkg = 1;
+						break;
+					}
+				}
+			}
+
+			if(!founddb) {
+				pm_printf(ALPM_LOG_ERROR,
+						_("repository '%s' does not exist\n"), repo);
+				ret++;
+			}
+			if(!foundpkg) {
+				pm_printf(ALPM_LOG_ERROR,
+						_("package '%s' was not found\n"), target);
+				ret++;
+			}
+			free(name);
+		}
+	} else {
+		for(i = syncs; i; i = alpm_list_next(i)) {
+			alpm_db_t *db = i->data;
+
+			for(j = alpm_db_get_pkgcache(db); j; j = alpm_list_next(j)) {
+				alpm_pkg_t *pkg = j->data;
+				dump_pkg_full(pkg, config->op_s_info > 1);
+			}
+		}
+	}
+
+	return ret;
+}
+
+/* search the sync dbs for a matching package */
+static int sync_search(alpm_list_t *syncs, alpm_list_t *targets)
+{
+	alpm_list_t *i;
+	int found = 0;
+
+	for(i = syncs; i; i = alpm_list_next(i)) {
+		alpm_db_t *db = i->data;
+		int ret = dump_pkg_search(db, targets, 1);
+
+		if(ret == -1) {
+			alpm_errno_t err = alpm_errno(config->handle);
+			pm_printf(ALPM_LOG_ERROR, "search failed: %s\n", alpm_strerror(err));
+			return 1;
+		}
+
+		found += !ret;
+	}
+
+	return (found == 0);
+}
+
+static int sync_cleancache(int level)
+{
+	alpm_list_t *i;
+	alpm_list_t *sync_dbs = alpm_get_syncdbs(config->handle);
+	alpm_db_t *db_local = alpm_get_localdb(config->handle);
+	alpm_list_t *cachedirs = alpm_option_get_cachedirs(config->handle);
+	int ret = 0;
+
+	if(!config->cleanmethod) {
+		/* default to KeepInstalled if user did not specify */
+		config->cleanmethod = PM_CLEAN_KEEPINST;
+	}
+
+	if(level == 1) {
+		printf(_("Packages to keep:\n"));
+		if(config->cleanmethod & PM_CLEAN_KEEPINST) {
+			printf(_("  All locally installed packages\n"));
+		}
+		if(config->cleanmethod & PM_CLEAN_KEEPCUR) {
+			printf(_("  All current sync database packages\n"));
+		}
+	}
+	printf("\n");
+
+	for(i = cachedirs; i; i = alpm_list_next(i)) {
+		const char *cachedir = i->data;
+		DIR *dir;
+		struct dirent *ent;
+
+		printf(_("Cache directory: %s\n"), (const char *)i->data);
+
+		if(level == 1) {
+			if(!yesno(_("Do you want to remove all other packages from cache?"))) {
+				printf("\n");
+				continue;
+			}
+			printf(_("removing old packages from cache...\n"));
+		} else {
+			if(!noyes(_("Do you want to remove ALL files from cache?"))) {
+				printf("\n");
+				continue;
+			}
+			printf(_("removing all files from cache...\n"));
+		}
+
+		dir = opendir(cachedir);
+		if(dir == NULL) {
+			pm_printf(ALPM_LOG_ERROR,
+					_("could not access cache directory %s\n"), cachedir);
+			ret++;
+			continue;
+		}
+
+		rewinddir(dir);
+		/* step through the directory one file at a time */
+		while((ent = readdir(dir)) != NULL) {
+			char path[PATH_MAX];
+			int delete = 1;
+			alpm_pkg_t *localpkg = NULL, *pkg = NULL;
+			const char *local_name, *local_version;
+
+			if(strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+				continue;
+			}
+
+			if(level <= 1) {
+				static const char *const glob_skips[] = {
+					/* skip signature files - they are removed with their package file */
+					"*.sig",
+					/* skip package databases within the cache directory */
+					"*.db*", "*.files*",
+					/* skip source packages within the cache directory */
+					"*.src.tar.*"
+				};
+				size_t j;
+
+				for(j = 0; j < ARRAYSIZE(glob_skips); j++) {
+					if(fnmatch(glob_skips[j], ent->d_name, 0) == 0) {
+						delete = 0;
+						break;
+					}
+				}
+				if(delete == 0) {
+					continue;
+				}
+			}
+
+			/* build the full filepath */
+			snprintf(path, PATH_MAX, "%s%s", cachedir, ent->d_name);
+
+			/* short circuit for removing all files from cache */
+			if(level > 1) {
+				ret += unlink_verbose(path, 0);
+				continue;
+			}
+
+			/* attempt to load the file as a package. if we cannot load the file,
+			 * simply skip it and move on. we don't need a full load of the package,
+			 * just the metadata. */
+			if(alpm_pkg_load(config->handle, path, 0, 0, &localpkg) != 0) {
+				pm_printf(ALPM_LOG_DEBUG, "skipping %s, could not load as package\n",
+						path);
+				continue;
+			}
+			local_name = alpm_pkg_get_name(localpkg);
+			local_version = alpm_pkg_get_version(localpkg);
+
+			if(config->cleanmethod & PM_CLEAN_KEEPINST) {
+				/* check if this package is in the local DB */
+				pkg = alpm_db_get_pkg(db_local, local_name);
+				if(pkg != NULL && alpm_pkg_vercmp(local_version,
+							alpm_pkg_get_version(pkg)) == 0) {
+					/* package was found in local DB and version matches, keep it */
+					pm_printf(ALPM_LOG_DEBUG, "package %s-%s found in local db\n",
+							local_name, local_version);
+					delete = 0;
+				}
+			}
+			if(config->cleanmethod & PM_CLEAN_KEEPCUR) {
+				alpm_list_t *j;
+				/* check if this package is in a sync DB */
+				for(j = sync_dbs; j && delete; j = alpm_list_next(j)) {
+					alpm_db_t *db = j->data;
+					pkg = alpm_db_get_pkg(db, local_name);
+					if(pkg != NULL && alpm_pkg_vercmp(local_version,
+								alpm_pkg_get_version(pkg)) == 0) {
+						/* package was found in a sync DB and version matches, keep it */
+						pm_printf(ALPM_LOG_DEBUG, "package %s-%s found in sync db\n",
+								local_name, local_version);
+						delete = 0;
+					}
+				}
+			}
+			/* free the local file package */
+			alpm_pkg_free(localpkg);
+
+			if(delete) {
+				size_t pathlen = strlen(path);
+				ret += unlink_verbose(path, 0);
+				/* unlink a signature file if present too */
+				if(PATH_MAX - 5 >= pathlen) {
+					strcpy(path + pathlen, ".sig");
+					ret += unlink_verbose(path, 1);
+				}
+			}
+		}
+		closedir(dir);
+		printf("\n");
+	}
+
+	return ret;
+}
+
+static int sync_cleandb(const char *dbpath)
+{
+	DIR *dir;
+	struct dirent *ent;
+	alpm_list_t *syncdbs;
+	int ret = 0;
+
+	dir = opendir(dbpath);
+	if(dir == NULL) {
+		pm_printf(ALPM_LOG_ERROR, _("could not access database directory\n"));
+		return 1;
+	}
+
+	syncdbs = alpm_get_syncdbs(config->handle);
+
+	rewinddir(dir);
+	/* step through the directory one file at a time */
+	while((ent = readdir(dir)) != NULL) {
+		char path[PATH_MAX];
+		struct stat buf;
+		int found = 0;
+		const char *dname = ent->d_name;
+		char *dbname;
+		size_t len;
+		alpm_list_t *i;
+
+		if(strcmp(dname, ".") == 0 || strcmp(dname, "..") == 0) {
+			continue;
+		}
+
+		/* build the full path */
+		snprintf(path, PATH_MAX, "%s%s", dbpath, dname);
+
+		/* remove all non-skipped directories and non-database files */
+		if(stat(path, &buf) == -1) {
+			pm_printf(ALPM_LOG_ERROR, _("could not remove %s: %s\n"),
+					path, strerror(errno));
+		}
+		if(S_ISDIR(buf.st_mode)) {
+			if(rmrf(path)) {
+				pm_printf(ALPM_LOG_ERROR, _("could not remove %s: %s\n"),
+						path, strerror(errno));
+			}
+			continue;
+		}
+
+		len = strlen(dname);
+		if(len > 3 && strcmp(dname + len - 3, ".db") == 0) {
+			dbname = strndup(dname, len - 3);
+		} else if(len > 7 && strcmp(dname + len - 7, ".db.sig") == 0) {
+			dbname = strndup(dname, len - 7);
+		} else if(len > 6 && strcmp(dname + len - 6, ".files") == 0) {
+			dbname = strndup(dname, len - 6);
+		} else if(len > 10 && strcmp(dname + len - 10, ".files.sig") == 0) {
+			dbname = strndup(dname, len - 10);
+		} else {
+			ret += unlink_verbose(path, 0);
+			continue;
+		}
+
+		for(i = syncdbs; i && !found; i = alpm_list_next(i)) {
+			alpm_db_t *db = i->data;
+			found = !strcmp(dbname, alpm_db_get_name(db));
+		}
+
+		/* We have a file that doesn't match any syncdb. */
+		if(!found) {
+			ret += unlink_verbose(path, 0);
+		}
+
+		free(dbname);
+	}
+	closedir(dir);
+	return ret;
+}
+
+static int sync_cleandb_all(void)
+{
+	const char *dbpath;
+	char *syncdbpath;
+	int ret = 0;
+
+	dbpath = alpm_option_get_dbpath(config->handle);
+	printf(_("Database directory: %s\n"), dbpath);
+	if(!yesno(_("Do you want to remove unused repositories?"))) {
+		return 0;
+	}
+	printf(_("removing unused sync repositories...\n"));
+
+	if(asprintf(&syncdbpath, "%s%s", dbpath, "sync/") < 0) {
+		ret += 1;
+		return ret;
+	}
+	ret += sync_cleandb(syncdbpath);
+	free(syncdbpath);
+
+	return ret;
+}
+
+//p_sync in reversed.cpp
+int pacman_sync(alpm_list_t *targets)
+{
+	alpm_list_t *sync_dbs = NULL;
+
+	/* clean the cache */
+	if(config->op_s_clean) {
+		int ret = 0;
+
+		if(trans_init(0, 0) == -1) {
+			return 1;
+		}
+
+		ret += sync_cleancache(config->op_s_clean);
+		ret += sync_cleandb_all();
+
+		if(trans_release() == -1) {
+			ret++;
+		}
+
+		return ret;
+	}
+
+	if(check_syncdbs(1, 0)) {
+		return 1;
+	}
+
+	sync_dbs = alpm_get_syncdbs(config->handle);
+
+	if(config->op_s_sync) {
+		/* grab a fresh package list */
+		colon_printf(_("Synchronizing package databases...\n"));
+		alpm_logaction(config->handle, PACMAN_CALLER_PREFIX,
+				"synchronizing package lists\n");
+		if(!sync_syncdbs(config->op_s_sync, sync_dbs)) {
+			return 1;
+		}
+	}
+
+	if(check_syncdbs(1, 1)) {
+		return 1;
+	}
+
+	/* search for a package */
+	if(config->op_s_search) {
+		return sync_search(sync_dbs, targets);
+	}
+
+	/* look for groups */
+	if(config->group) {
+		return sync_group(config->group, sync_dbs, targets);
+	}
+
+	/* get package info */
+	if(config->op_s_info) {
+		return sync_info(sync_dbs, targets);
+	}
+
+	/* get a listing of files in sync DBs */
+	if(config->op_q_list) {
+		return sync_list(sync_dbs, targets);
+	}
+
+	if(targets == NULL) {
+		if(config->op_s_upgrade) {
+			/* proceed */
+		} else if(config->op_s_sync) {
+			return 0;
+		} else {
+			/* don't proceed here unless we have an operation that doesn't require a
+			 * target list */
+			pm_printf(ALPM_LOG_ERROR, _("no targets specified (use -h for help)\n"));
+			return 1;
+		}
+	}
+
+	return sync_trans(targets);
 }
 
 //MD5 CHECKSUM FUNCTIONS (FROM CHECK.C)
@@ -570,6 +1889,301 @@ int check_pkg_full(alpm_pkg_t *pkg)
 }
 
 //CALLBACK FUNCTIONS (FROM CALLBACK.C)
+//I AM NOT SURE IF THIS IS CORRECT!!! cb_trans_event in reversed.c
+/* callback to handle messages/notifications from libalpm transactions */
+void cb_event(void *ctx, alpm_event_t *event)
+{
+	(void)ctx;
+	if(config->print) {
+		console_cursor_move_end();
+		return;
+	}
+	switch(event->type) {
+		case ALPM_EVENT_HOOK_START:
+			if(event->hook.when == ALPM_HOOK_PRE_TRANSACTION) {
+				colon_printf(_("Running pre-transaction hooks...\n"));
+			} else {
+				colon_printf(_("Running post-transaction hooks...\n"));
+			}
+			break;
+		case ALPM_EVENT_HOOK_RUN_START:
+			{
+				alpm_event_hook_run_t *e = &event->hook_run;
+				int digits = number_length(e->total);
+				printf("(%*zu/%*zu) %s\n", digits, e->position,
+						digits, e->total, 
+						e->desc ? e->desc : e->name);
+			}
+			break;
+		case ALPM_EVENT_CHECKDEPS_START:
+			printf(_("checking dependencies...\n"));
+			break;
+		case ALPM_EVENT_FILECONFLICTS_START:
+			if(config->noprogressbar) {
+				printf(_("checking for file conflicts...\n"));
+			}
+			break;
+		case ALPM_EVENT_RESOLVEDEPS_START:
+			printf(_("resolving dependencies...\n"));
+			break;
+		case ALPM_EVENT_INTERCONFLICTS_START:
+			printf(_("looking for conflicting packages...\n"));
+			break;
+		case ALPM_EVENT_TRANSACTION_START:
+			colon_printf(_("Processing package changes...\n"));
+			break;
+		case ALPM_EVENT_PACKAGE_OPERATION_START:
+			if(config->noprogressbar) {
+				alpm_event_package_operation_t *e = &event->package_operation;
+				switch(e->operation) {
+					case ALPM_PACKAGE_INSTALL:
+						printf(_("installing %s...\n"), alpm_pkg_get_name(e->newpkg));
+						break;
+					case ALPM_PACKAGE_UPGRADE:
+						printf(_("upgrading %s...\n"), alpm_pkg_get_name(e->newpkg));
+						break;
+					case ALPM_PACKAGE_REINSTALL:
+						printf(_("reinstalling %s...\n"), alpm_pkg_get_name(e->newpkg));
+						break;
+					case ALPM_PACKAGE_DOWNGRADE:
+						printf(_("downgrading %s...\n"), alpm_pkg_get_name(e->newpkg));
+						break;
+					case ALPM_PACKAGE_REMOVE:
+						printf(_("removing %s...\n"), alpm_pkg_get_name(e->oldpkg));
+						break;
+				}
+			}
+			break;
+		case ALPM_EVENT_PACKAGE_OPERATION_DONE:
+			{
+				alpm_event_package_operation_t *e = &event->package_operation;
+				switch(e->operation) {
+					case ALPM_PACKAGE_INSTALL:
+						display_optdepends(e->newpkg);
+						break;
+					case ALPM_PACKAGE_UPGRADE:
+					case ALPM_PACKAGE_DOWNGRADE:
+						display_new_optdepends(e->oldpkg, e->newpkg);
+						break;
+					case ALPM_PACKAGE_REINSTALL:
+					case ALPM_PACKAGE_REMOVE:
+						break;
+				}
+			}
+			break;
+		case ALPM_EVENT_INTEGRITY_START:
+			if(config->noprogressbar) {
+				printf(_("checking package integrity...\n"));
+			}
+			break;
+		case ALPM_EVENT_KEYRING_START:
+			if(config->noprogressbar) {
+				printf(_("checking keyring...\n"));
+			}
+			break;
+		case ALPM_EVENT_KEY_DOWNLOAD_START:
+			printf(_("downloading required keys...\n"));
+			break;
+		case ALPM_EVENT_LOAD_START:
+			if(config->noprogressbar) {
+				printf(_("loading package files...\n"));
+			}
+			break;
+		case ALPM_EVENT_SCRIPTLET_INFO:
+			fputs(event->scriptlet_info.line, stdout);
+			break;
+		case ALPM_EVENT_DB_RETRIEVE_START:
+			on_progress = 1;
+			break;
+		case ALPM_EVENT_PKG_RETRIEVE_START:
+			colon_printf(_("Retrieving packages...\n"));
+			on_progress = 1;
+			list_total_pkgs = event->pkg_retrieve.num;
+			list_total = event->pkg_retrieve.total_size;
+			total_enabled = list_total && list_total_pkgs > 1 && dload_progressbar_enabled();
+
+			if(total_enabled) {
+				init_total_progressbar();
+			}
+			break;
+		case ALPM_EVENT_DISKSPACE_START:
+			if(config->noprogressbar) {
+				printf(_("checking available disk space...\n"));
+			}
+			break;
+		case ALPM_EVENT_OPTDEP_REMOVAL:
+			{
+				alpm_event_optdep_removal_t *e = &event->optdep_removal;
+				char *dep_string = alpm_dep_compute_string(e->optdep);
+				colon_printf(_("%s optionally requires %s\n"),
+						alpm_pkg_get_name(e->pkg),
+						dep_string);
+				free(dep_string);
+			}
+			break;
+		case ALPM_EVENT_DATABASE_MISSING:
+			if(!config->op_s_sync) {
+				pm_printf(ALPM_LOG_WARNING,
+						"database file for '%s' does not exist (use '%s' to download)\n",
+						event->database_missing.dbname,
+						config->op == PM_OP_FILES ? "-Fy": "-Sy");
+			}
+			break;
+		case ALPM_EVENT_PACNEW_CREATED:
+			{
+				alpm_event_pacnew_created_t *e = &event->pacnew_created;
+				if(on_progress) {
+					char *string = NULL;
+					pm_sprintf(&string, ALPM_LOG_WARNING, _("%s installed as %s.pacnew\n"),
+							e->file, e->file);
+					if(string != NULL) {
+						output = alpm_list_add(output, string);
+					}
+				} else {
+					pm_printf(ALPM_LOG_WARNING, _("%s installed as %s.pacnew\n"),
+							e->file, e->file);
+				}
+			}
+			break;
+		case ALPM_EVENT_PACSAVE_CREATED:
+			{
+				alpm_event_pacsave_created_t *e = &event->pacsave_created;
+				if(on_progress) {
+					char *string = NULL;
+					pm_sprintf(&string, ALPM_LOG_WARNING, _("%s saved as %s.pacsave\n"),
+							e->file, e->file);
+					if(string != NULL) {
+						output = alpm_list_add(output, string);
+					}
+				} else {
+					pm_printf(ALPM_LOG_WARNING, _("%s saved as %s.pacsave\n"),
+							e->file, e->file);
+				}
+			}
+			break;
+		case ALPM_EVENT_DB_RETRIEVE_DONE:
+		case ALPM_EVENT_DB_RETRIEVE_FAILED:
+		case ALPM_EVENT_PKG_RETRIEVE_DONE:
+		case ALPM_EVENT_PKG_RETRIEVE_FAILED:
+			console_cursor_move_end();
+			if(total_enabled) {
+				update_bar_finalstats(totalbar);
+				draw_pacman_progress_bar(totalbar);
+				free(totalbar);
+				printf("\n");
+			}
+			total_enabled = 0;
+			flush_output_list();
+			on_progress = 0;
+			break;
+		/* all the simple done events, with fallthrough for each */
+		case ALPM_EVENT_FILECONFLICTS_DONE:
+		case ALPM_EVENT_CHECKDEPS_DONE:
+		case ALPM_EVENT_RESOLVEDEPS_DONE:
+		case ALPM_EVENT_INTERCONFLICTS_DONE:
+		case ALPM_EVENT_TRANSACTION_DONE:
+		case ALPM_EVENT_INTEGRITY_DONE:
+		case ALPM_EVENT_KEYRING_DONE:
+		case ALPM_EVENT_KEY_DOWNLOAD_DONE:
+		case ALPM_EVENT_LOAD_DONE:
+		case ALPM_EVENT_DISKSPACE_DONE:
+		case ALPM_EVENT_HOOK_DONE:
+		case ALPM_EVENT_HOOK_RUN_DONE:
+			/* nothing */
+			break;
+	}
+	fflush(stdout);
+}
+
+/**
+ * Silly little helper function, determines if the caller needs a visual update
+ * since the last time this function was called.
+ * This is made for the two progress bar functions, to prevent flicker.
+ * @param first_call 1 on first call for initialization purposes, 0 otherwise
+ * @return number of milliseconds since last call
+ */
+static int64_t get_update_timediff(int first_call)
+{
+	int64_t retval = 0;
+	static int64_t last_time = 0;
+
+	/* on first call, simply set the last time and return */
+	if(first_call) {
+		last_time = get_time_ms();
+	} else {
+		int64_t this_time = get_time_ms();
+		retval = this_time - last_time;
+
+		/* do not update last_time if interval was too short */
+		if(retval < 0 || retval >= UPDATE_SPEED_MS) {
+			last_time = this_time;
+		}
+	}
+
+	return retval;
+}
+
+/* refactored from cb_trans_progress */
+static void fill_progress(const int bar_percent, const int disp_percent,
+		const int proglen)
+{
+	/* 8 = 1 space + 1 [ + 1 ] + 5 for percent */
+	const int hashlen = proglen > 8 ? proglen - 8 : 0;
+	const int hash = bar_percent * hashlen / 100;
+	static int lasthash = 0, mouth = 0;
+	int i;
+
+	if(bar_percent == 0) {
+		lasthash = 0;
+		mouth = 0;
+	}
+
+	if(hashlen > 0) {
+		fputs(" [", stdout);
+		for(i = hashlen; i > 0; --i) {
+			/* if special progress bar enabled */
+			if(config->chomp) {
+				if(i > hashlen - hash) {
+					putchar('-');
+				} else if(i == hashlen - hash) {
+					if(lasthash == hash) {
+						if(mouth) {
+							fputs("\033[1;33mC\033[m", stdout);
+						} else {
+							fputs("\033[1;33mc\033[m", stdout);
+						}
+					} else {
+						lasthash = hash;
+						mouth = mouth == 1 ? 0 : 1;
+						if(mouth) {
+							fputs("\033[1;33mC\033[m", stdout);
+						} else {
+							fputs("\033[1;33mc\033[m", stdout);
+						}
+					}
+				} else if(i % 3 == 0) {
+					fputs("\033[0;37mo\033[m", stdout);
+				} else {
+					fputs("\033[0;37m \033[m", stdout);
+				}
+			} /* else regular progress bar */
+			else if(i > hashlen - hash) {
+				putchar('#');
+			} else {
+				putchar('-');
+			}
+		}
+		putchar(']');
+	}
+	/* print display percent after progress bar */
+	/* 5 = 1 space + 3 digits + 1 % */
+	if(proglen >= 5) {
+		printf(" %3d%%", disp_percent);
+	}
+
+	putchar('\r');
+	fflush(stdout);
+}
 
 //PACKAGE FUNCTIONS (FROM PACKAGE.C)
 //handler()
@@ -891,6 +2505,23 @@ void dump_pkg_changelog(alpm_pkg_t *pkg)
 		}
 		alpm_pkg_changelog_close(pkg, fp);
 		putchar('\n');
+	}
+}
+
+void print_installed(alpm_db_t *db_local, alpm_pkg_t *pkg)
+{
+	const char *pkgname = alpm_pkg_get_name(pkg);
+	const char *pkgver = alpm_pkg_get_version(pkg);
+	alpm_pkg_t *lpkg = alpm_db_get_pkg(db_local, pkgname);
+	if(lpkg) {
+		const char *lpkgver = alpm_pkg_get_version(lpkg);
+		const colstr_t *colstr = &config->colstr;
+		if(strcmp(lpkgver, pkgver) == 0) {
+			printf(" %s[%s]%s", colstr->meta, _("installed"), colstr->nocolor);
+		} else {
+			printf(" %s[%s: %s]%s", colstr->meta, _("installed"),
+					lpkgver, colstr->nocolor);
+		}
 	}
 }
 
@@ -1386,4 +3017,122 @@ static int parseargs(int argc, char *argv[])
 	}
 
 	return 0;
+}
+
+//MAIN FILES (FROM TESTPKG.C)
+
+//Nevermind, main is original. Closest is still from testpkg.c tho.
+int main(int argc, char** argv) {
+    // Set up signals
+    struct sigaction new_action, old_action; 
+    new_action.sa_handler = handler;
+    sigemptyset(&new_action.sa_mask);
+    new_action.sa_flags = 0;
+
+    sigaction(2, NULL, &old_action);
+
+    if (old_action.sa_handler != SIG_IGN) {
+        sigaction(SIGINT, &new_action, NULL);
+    }
+    sigaction(SIGHUP, NULL, &old_action);
+
+    if (old_action.sa_handler != SIG_IGN) {
+        sigaction(SIGHUP, &new_action, NULL);
+    }
+    sigaction(SIGTERM, NULL, &old_action);
+
+    if (old_action.sa_handler != SIG_IGN) {
+        sigaction(SIGTERM, &new_action, NULL);
+    }
+
+    // alpm setup
+    struct utsname buf;
+
+    localize();
+    uname(buf);
+
+    char buffer[100];
+    snprintf(buffer, 100, "pkgmis/%s (%s %s) libalpm/%s", "3.5.4", buf, buf.machine, alpm_version());
+    setenv("HTTP_USER_AGENT", buffer, 0);
+    config_new();
+
+    if (alpm_initialize() == -1) {
+        pm_printf(gettext("Error: Necessary libraries could not be initialized\n"));
+        exit(1);
+    }
+
+    alpm_option_set_root('/');
+    alpm_option_set_dbpath("/opt/pkgmis/var/lib/pkgmis/");
+    alpm_option_set_logfile();
+
+    parseargs(argc, argv);
+
+    int stdin_no = fileno(stdin);
+    stdin_no = isatty(stdin_no);
+
+    char temp_arr[4104];
+    ushort** temp_arr_ref;
+
+    if (stdin_no == 0) {
+        alpm_list_t* temp = alpm_list_find_str(pm_targets, '-');
+
+        if (temp != NULL) {
+            int i = 0;
+            pm_targets = alpm_list_remove_str(pm_targets, '-', 0);
+
+            while (i < 0x1000) {
+                stdin_no = fgetc(stdin);
+                temp_arr[i] = (char)stdin_no;
+
+                if (temp_arr[i] == 0xff) {
+                    break;
+                }
+
+                if((*temp_arr_ref)[temp_arr[i]] & 0x2000 == 0) {
+                    i++;
+                } else if (i > 0) {
+                    temp_arr[i] = 0;
+                    char* temp_str = strdup((char*)temp_arr);
+
+                    pm_targets = alpm_list_add(pm_targets, temp_str);
+                    i = 0;
+                }
+            }
+
+            if(i > 0xfff) {
+                pm_printf(gettext("Error: Buffer overflow detected while parsing arguments!\n"));
+                exit(1);
+            }
+
+            if(i > 0) {
+                temp_arr[i] = 0;
+                char* temp_str = strdup((char*)temp_arr);
+
+                pm_targets = alpm_list_add(pm_targets, temp_str);
+            }
+
+            FILE* ss = stdin;
+            char* cter_out = ctermid((char*)NULL);
+            ss = freopen(cter_out, "r", ss);
+
+            if (ss == NULL) {
+                pm_printf(gettext("Error: stdin could not be reopened.\n"));
+            }
+        }
+    }
+
+    // Root access commands
+    parseconfig();
+    needs_root();
+
+    if (*config == 4) {
+        p_query(pm_targets);
+    } else if (*config == 5) {
+        p_sync(pm_targets);
+    } else {
+        pm_printf(gettext("Error: No operation was specified. Use the -h flag for help.\n"));
+        exit(1);
+    }
+
+    return 0;
 }

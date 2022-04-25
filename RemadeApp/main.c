@@ -45,15 +45,318 @@
 #include <alpm.h>
 #include <alpm_list.h>
 
+//I HAVE PASTED UP TO LINE 547!!
+
 //INTRO FILES (FROM TESTPKG.C)
 
 //UTILITY FILES (FROM UTIL.C)
+int needs_root(void)
+{
+	if(config->sysroot) {
+		return 1;
+	}
+	switch(config->op) {
+		case PM_OP_DATABASE:
+			return !config->op_q_check;
+		case PM_OP_UPGRADE:
+		case PM_OP_REMOVE:
+			return !config->print;
+		case PM_OP_SYNC:
+			return (config->op_s_clean || config->op_s_sync ||
+					(!config->group && !config->op_s_info && !config->op_q_list &&
+					 !config->op_s_search && !config->print));
+		case PM_OP_FILES:
+			return config->op_s_sync;
+		default:
+			return 0;
+	}
+}
+
+unsigned short getcols(void)
+{
+	const char *e;
+	int c = -1;
+
+	if(cached_columns >= 0) {
+		return cached_columns;
+	}
+
+	e = getenv("COLUMNS");
+	if(e && *e) {
+		char *p = NULL;
+		c = strtol(e, &p, 10);
+		if(*p != '\0') {
+			c= -1;
+		}
+	}
+
+	if(c < 0) {
+		c = getcols_fd(STDOUT_FILENO);
+	}
+
+	if(c < 0) {
+		c = 80;
+	}
+
+	cached_columns = c;
+	return c;
+}
+
+static size_t string_length(const char *s)
+{
+	int len;
+	wchar_t *wcstr;
+
+	if(!s || s[0] == '\0') {
+		return 0;
+	}
+	if(strstr(s, "\033")) {
+		char* replaced = malloc(sizeof(char) * strlen(s));
+		int iter = 0;
+		for(; *s; s++) {
+			if(*s == '\033') {
+				while(*s != 'm') {
+					s++;
+				}
+			} else {
+				replaced[iter] = *s;
+				iter++;
+			}
+		}
+		replaced[iter] = '\0';
+		len = iter;
+		wcstr = calloc(len, sizeof(wchar_t));
+		len = mbstowcs(wcstr, replaced, len);
+		len = wcswidth(wcstr, len);
+		free(wcstr);
+		free(replaced);
+	} else {
+		/* len goes from # bytes -> # chars -> # cols */
+		len = strlen(s) + 1;
+		wcstr = calloc(len, sizeof(wchar_t));
+		len = mbstowcs(wcstr, s, len);
+		len = wcswidth(wcstr, len);
+		free(wcstr);
+	}
+
+	return len;
+}
+
+/* output a string, but wrap words properly with a specified indentation
+ */
+void indentprint(const char *str, unsigned short indent, unsigned short cols)
+{
+	wchar_t *wcstr;
+	const wchar_t *p;
+	size_t len, cidx;
+
+	if(!str) {
+		return;
+	}
+
+	/* if we're not a tty, or our tty is not wide enough that wrapping even makes
+	 * sense, print without indenting */
+	if(cols == 0 || indent > cols) {
+		fputs(str, stdout);
+		return;
+	}
+
+	len = strlen(str) + 1;
+	wcstr = calloc(len, sizeof(wchar_t));
+	len = mbstowcs(wcstr, str, len);
+	p = wcstr;
+	cidx = indent;
+
+	if(!p || !len) {
+		free(wcstr);
+		return;
+	}
+
+	while(*p) {
+		if(*p == L' ') {
+			const wchar_t *q, *next;
+			p++;
+			if(p == NULL || *p == L' ') continue;
+			next = wcschr(p, L' ');
+			if(next == NULL) {
+				next = p + wcslen(p);
+			}
+			/* len captures # cols */
+			len = 0;
+			q = p;
+			while(q < next) {
+				len += wcwidth(*q++);
+			}
+			if((len + 1) > (cols - cidx)) {
+				/* wrap to a newline and reindent */
+				printf("\n%-*s", (int)indent, "");
+				cidx = indent;
+			} else {
+				printf(" ");
+				cidx++;
+			}
+			continue;
+		}
+		printf("%lc", (wint_t)*p);
+		cidx += wcwidth(*p);
+		p++;
+	}
+	free(wcstr);
+}
+
+void string_display(const char *title, const char *string, unsigned short cols)
+{
+	if(title) {
+		printf("%s%s%s ", config->colstr.title, title, config->colstr.nocolor);
+	}
+	if(string == NULL || string[0] == '\0') {
+		printf(_("None"));
+	} else {
+		/* compute the length of title + a space */
+		size_t len = string_length(title) + 1;
+		indentprint(string, (unsigned short)len, cols);
+	}
+	printf("\n");
+}
+
+void list_display(const char *title, const alpm_list_t *list,
+		unsigned short maxcols)
+{
+	const alpm_list_t *i;
+	size_t len = 0;
+
+	if(title) {
+		len = string_length(title) + 1;
+		printf("%s%s%s ", config->colstr.title, title, config->colstr.nocolor);
+	}
+
+	if(!list) {
+		printf("%s\n", _("None"));
+	} else {
+		size_t cols = len;
+		const char *str = list->data;
+		fputs(str, stdout);
+		cols += string_length(str);
+		for(i = alpm_list_next(list); i; i = alpm_list_next(i)) {
+			str = i->data;
+			size_t s = string_length(str);
+			/* wrap only if we have enough usable column space */
+			if(maxcols > len && cols + s + 2 >= maxcols) {
+				size_t j;
+				cols = len;
+				printf("\n");
+				for(j = 1; j <= len; j++) {
+					printf(" ");
+				}
+			} else if(cols != len) {
+				/* 2 spaces are added if this is not the first element on a line. */
+				printf("  ");
+				cols += 2;
+			}
+			fputs(str, stdout);
+			cols += s;
+		}
+		putchar('\n');
+	}
+}
+
+void list_display_linebreak(const char *title, const alpm_list_t *list,
+		unsigned short maxcols)
+{
+	unsigned short len = 0;
+
+	if(title) {
+		len = (unsigned short)string_length(title) + 1;
+		printf("%s%s%s ", config->colstr.title, title, config->colstr.nocolor);
+	}
+
+	if(!list) {
+		printf("%s\n", _("None"));
+	} else {
+		const alpm_list_t *i;
+		/* Print the first element */
+		indentprint((const char *)list->data, len, maxcols);
+		printf("\n");
+		/* Print the rest */
+		for(i = alpm_list_next(list); i; i = alpm_list_next(i)) {
+			size_t j;
+			for(j = 1; j <= len; j++) {
+				printf(" ");
+			}
+			indentprint((const char *)i->data, len, maxcols);
+			printf("\n");
+		}
+	}
+}
 
 //MORE UTILITY FILES (FROM UTIL-COMMON)
 
 //CONFIGURATION FILES (FROM CONF.C)
+config_t *config_new(void)
+{
+	config_t *newconfig = calloc(1, sizeof(config_t));
+	if(!newconfig) {
+		pm_printf(ALPM_LOG_ERROR,
+				_n("malloc failure: could not allocate %zu byte\n",
+				   "malloc failure: could not allocate %zu bytes\n", sizeof(config_t)),
+				sizeof(config_t));
+		return NULL;
+	}
+	/* defaults which may get overridden later */
+	newconfig->op = PM_OP_MAIN;
+	newconfig->logmask = ALPM_LOG_ERROR | ALPM_LOG_WARNING;
+	newconfig->configfile = strdup(CONFFILE);
+	if(alpm_capabilities() & ALPM_CAPABILITY_SIGNATURES) {
+		newconfig->siglevel = ALPM_SIG_PACKAGE | ALPM_SIG_PACKAGE_OPTIONAL |
+			ALPM_SIG_DATABASE | ALPM_SIG_DATABASE_OPTIONAL;
+		newconfig->localfilesiglevel = ALPM_SIG_USE_DEFAULT;
+		newconfig->remotefilesiglevel = ALPM_SIG_USE_DEFAULT;
+	}
+
+	/* by default use 1 download stream */
+	newconfig->parallel_downloads = 1;
+	newconfig->colstr.colon   = ":: ";
+	newconfig->colstr.title   = "";
+	newconfig->colstr.repo    = "";
+	newconfig->colstr.version = "";
+	newconfig->colstr.groups  = "";
+	newconfig->colstr.meta    = "";
+	newconfig->colstr.warn    = "";
+	newconfig->colstr.err     = "";
+	newconfig->colstr.faint   = "";
+	newconfig->colstr.nocolor = "";
+
+	return newconfig;
+}
 
 //QUERY FILES (FROM QUERY.C)
+static int filter(alpm_pkg_t *pkg)
+{
+	/* check if this package was explicitly installed */
+	if(config->op_q_explicit &&
+			alpm_pkg_get_reason(pkg) != ALPM_PKG_REASON_EXPLICIT) {
+		return 0;
+	}
+	/* check if this package was installed as a dependency */
+	if(config->op_q_deps &&
+			alpm_pkg_get_reason(pkg) != ALPM_PKG_REASON_DEPEND) {
+		return 0;
+	}
+	/* check if this pkg is or isn't in a sync DB */
+	if(config->op_q_locality && config->op_q_locality != pkg_get_locality(pkg)) {
+		return 0;
+	}
+	/* check if this pkg is unrequired */
+	if(config->op_q_unrequired && !is_unrequired(pkg, config->op_q_unrequired)) {
+		return 0;
+	}
+	/* check if this pkg is outdated */
+	if(config->op_q_upgrade && (alpm_sync_get_new_version(pkg,
+					alpm_get_syncdbs(config->handle)) == NULL)) {
+		return 0;
+	}
+	return 1;
+}
 
 //UPDATING FUNCTIONS (FROM SYNC.C)
 
@@ -86,7 +389,6 @@ void version() {
     puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
     puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*/\n");
 }
-
 
 //MAIN FUNCTIONS (FROM PACMAN.C)
 char* mbasename(char* input) {

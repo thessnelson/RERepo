@@ -41,14 +41,16 @@
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <wctype.h>
+//from reversing.c
+#include <libintl.h> //for gettext
 /* alpm */
 #include <alpm.h>
 #include <alpm_list.h>
 // SYNC_SYNCTREE IS FROM THE ORIGINAL FILE BC I CANT FIND IT
 
 /*
-Currently debugging: needs_root()
-
+Major bug that needs fixed.
+'op' is not a structure or union.
 */
 
 // GLOBAL VARIABLES FROM EACH FILE
@@ -2740,7 +2742,28 @@ static void fill_progress(const int bar_percent, const int disp_percent,
 }
 
 // PACKAGE FUNCTIONS (FROM PACKAGE.C)
-// handler()
+/** Parse a configuration file.
+ * @param file path to the config file
+ * @return 0 on success, non-zero on error
+ */
+int parseconfig(const char *file)
+{
+	int ret;
+	if((ret = parseconfigfile(file))) {
+		return ret;
+	}
+	if((ret = setdefaults(config))) {
+		return ret;
+	}
+	pm_printf(ALPM_LOG_DEBUG, "config: finished parsing %s\n", file);
+	if((ret = setup_libalpm())) {
+		return ret;
+	}
+	alpm_list_free_inner(config->repos, (alpm_list_fn_free) config_repo_free);
+	alpm_list_free(config->repos);
+	config->repos = NULL;
+	return ret;
+}
 
 void version()
 {
@@ -3182,6 +3205,130 @@ static void usage(int op, const char *const myname)
 #undef addlist
 }
 
+static void checkargs_database(void)
+{
+	invalid_opt(config->flags & ALPM_TRANS_FLAG_ALLDEPS
+			&& config->flags & ALPM_TRANS_FLAG_ALLEXPLICIT,
+			"--asdeps", "--asexplicit");
+
+	if(config->op_q_check) {
+		invalid_opt(config->flags & ALPM_TRANS_FLAG_ALLDEPS,
+				"--asdeps", "--check");
+		invalid_opt(config->flags & ALPM_TRANS_FLAG_ALLEXPLICIT,
+				"--asexplicit", "--check");
+	}
+}
+
+static void checkargs_query(void)
+{
+	if(config->op_q_isfile) {
+		invalid_opt(config->group, "--file", "--groups");
+		invalid_opt(config->op_q_search, "--file", "--search");
+		invalid_opt(config->op_q_owns, "--file", "--owns");
+	} else if(config->op_q_search) {
+		invalid_opt(config->group, "--search", "--groups");
+		invalid_opt(config->op_q_owns, "--search", "--owns");
+		checkargs_query_display_opts("--search");
+		checkargs_query_filter_opts("--search");
+	} else if(config->op_q_owns) {
+		invalid_opt(config->group, "--owns", "--groups");
+		checkargs_query_display_opts("--owns");
+		checkargs_query_filter_opts("--owns");
+	} else if(config->group) {
+		checkargs_query_display_opts("--groups");
+	}
+
+	invalid_opt(config->op_q_deps && config->op_q_explicit, "--deps", "--explicit");
+	invalid_opt((config->op_q_locality & PKG_LOCALITY_NATIVE) &&
+				 (config->op_q_locality & PKG_LOCALITY_FOREIGN),
+			"--native", "--foreign");
+}
+
+static void checkargs_sync(void)
+{
+	checkargs_upgrade();
+	if(config->op_s_clean) {
+		invalid_opt(config->group, "--clean", "--groups");
+		invalid_opt(config->op_s_info, "--clean", "--info");
+		invalid_opt(config->op_q_list, "--clean", "--list");
+		invalid_opt(config->op_s_sync, "--clean", "--refresh");
+		invalid_opt(config->op_s_search, "--clean", "--search");
+		invalid_opt(config->op_s_upgrade, "--clean", "--sysupgrade");
+		invalid_opt(config->op_s_downloadonly, "--clean", "--downloadonly");
+	} else if(config->op_s_info) {
+		invalid_opt(config->group, "--info", "--groups");
+		invalid_opt(config->op_q_list, "--info", "--list");
+		invalid_opt(config->op_s_search, "--info", "--search");
+		invalid_opt(config->op_s_upgrade, "--info", "--sysupgrade");
+		invalid_opt(config->op_s_downloadonly, "--info", "--downloadonly");
+	} else if(config->op_s_search) {
+		invalid_opt(config->group, "--search", "--groups");
+		invalid_opt(config->op_q_list, "--search", "--list");
+		invalid_opt(config->op_s_upgrade, "--search", "--sysupgrade");
+		invalid_opt(config->op_s_downloadonly, "--search", "--downloadonly");
+	} else if(config->op_q_list) {
+		invalid_opt(config->group, "--list", "--groups");
+		invalid_opt(config->op_s_upgrade, "--list", "--sysupgrade");
+		invalid_opt(config->op_s_downloadonly, "--list", "--downloadonly");
+	} else if(config->group) {
+		invalid_opt(config->op_s_upgrade, "--groups", "--sysupgrade");
+		invalid_opt(config->op_s_downloadonly, "--groups", "--downloadonly");
+	}
+}
+
+static void checkargs_remove(void)
+{
+	checkargs_trans();
+	if(config->flags & ALPM_TRANS_FLAG_NOSAVE) {
+		invalid_opt(config->print, "--nosave", "--print");
+		invalid_opt(config->flags & ALPM_TRANS_FLAG_DBONLY,
+				"--nosave", "--dbonly");
+	}
+}
+
+/* options common to -S -U */
+static int parsearg_upgrade(int opt)
+{
+	if(parsearg_trans(opt) == 0) {
+		return 0;
+	}
+	switch(opt) {
+		case OP_OVERWRITE_FILES:
+			parsearg_util_addlist(&(config->overwrite_files));
+			break;
+		case OP_ASDEPS:
+			config->flags |= ALPM_TRANS_FLAG_ALLDEPS;
+			break;
+		case OP_ASEXPLICIT:
+			config->flags |= ALPM_TRANS_FLAG_ALLEXPLICIT;
+			break;
+		case OP_NEEDED:
+			config->flags |= ALPM_TRANS_FLAG_NEEDED;
+			break;
+		case OP_IGNORE:
+			parsearg_util_addlist(&(config->ignorepkg));
+			break;
+		case OP_IGNOREGROUP:
+			parsearg_util_addlist(&(config->ignoregrp));
+			break;
+		case OP_DOWNLOADONLY:
+		case 'w':
+			config->op_s_downloadonly = 1;
+			config->flags |= ALPM_TRANS_FLAG_DOWNLOADONLY;
+			config->flags |= ALPM_TRANS_FLAG_NOCONFLICTS;
+			break;
+		default: return 1;
+	}
+	return 0;
+}
+
+static void checkargs_files(void)
+{
+	if(config->op_q_search) {
+		invalid_opt(config->op_q_list, "--regex", "--list");
+	}
+}
+
 /** Helper function for parsing operation from command-line arguments.
  * @param opt Keycode returned by getopt_long
  * @param dryrun If nonzero, application state is NOT changed
@@ -3355,6 +3502,122 @@ static int parsearg_sync(int opt)
 		break;
 	default:
 		return 1;
+	}
+	return 0;
+}
+
+#if defined(ENABLE_NLS)
+static void localize(void)
+{
+	static int init = 0;
+	if(!init) {
+		setlocale(LC_ALL, "");
+		bindtextdomain(PACKAGE, LOCALEDIR);
+		textdomain(PACKAGE);
+		init = 1;
+	}
+}
+#endif
+
+/** Helper functions for parsing command-line arguments.
+ * @param opt Keycode returned by getopt_long
+ * @return 0 on success, 1 on failure
+ */
+static int parsearg_global(int opt)
+{
+	switch(opt) {
+		case OP_ARCH:
+			config_add_architecture(strdup(optarg));
+			break;
+		case OP_ASK:
+			config->noask = 1;
+			config->ask = (unsigned int)atoi(optarg);
+			break;
+		case OP_CACHEDIR:
+			config->cachedirs = alpm_list_add(config->cachedirs, strdup(optarg));
+			break;
+		case OP_COLOR:
+			if(strcmp("never", optarg) == 0) {
+				config->color = PM_COLOR_OFF;
+			} else if(strcmp("auto", optarg) == 0) {
+				config->color = isatty(fileno(stdout)) ? PM_COLOR_ON : PM_COLOR_OFF;
+			} else if(strcmp("always", optarg) == 0) {
+				config->color = PM_COLOR_ON;
+			} else {
+				pm_printf(ALPM_LOG_ERROR, _("invalid argument '%s' for %s\n"),
+						optarg, "--color");
+				return 1;
+			}
+			enable_colors(config->color);
+			break;
+		case OP_CONFIG:
+			free(config->configfile);
+			config->configfile = strndup(optarg, PATH_MAX);
+			break;
+		case OP_DEBUG:
+			/* debug levels are made more 'human readable' than using a raw logmask
+			 * here, error and warning are set in config_new, though perhaps a
+			 * --quiet option will remove these later */
+			if(optarg) {
+				unsigned short debug = (unsigned short)atoi(optarg);
+				switch(debug) {
+					case 2:
+						config->logmask |= ALPM_LOG_FUNCTION;
+						__attribute__((fallthrough));
+					case 1:
+						config->logmask |= ALPM_LOG_DEBUG;
+						break;
+					default:
+						pm_printf(ALPM_LOG_ERROR, _("'%s' is not a valid debug level\n"),
+								optarg);
+						return 1;
+				}
+			} else {
+				config->logmask |= ALPM_LOG_DEBUG;
+			}
+			/* progress bars get wonky with debug on, shut them off */
+			config->noprogressbar = 1;
+			break;
+		case OP_GPGDIR:
+			free(config->gpgdir);
+			config->gpgdir = strdup(optarg);
+			break;
+		case OP_HOOKDIR:
+			config->hookdirs = alpm_list_add(config->hookdirs, strdup(optarg));
+			break;
+		case OP_LOGFILE:
+			free(config->logfile);
+			config->logfile = strndup(optarg, PATH_MAX);
+			break;
+		case OP_NOCONFIRM:
+			config->noconfirm = 1;
+			break;
+		case OP_CONFIRM:
+			config->noconfirm = 0;
+			break;
+		case OP_DBPATH:
+		case 'b':
+			free(config->dbpath);
+			config->dbpath = strdup(optarg);
+			break;
+		case OP_ROOT:
+		case 'r':
+			free(config->rootdir);
+			config->rootdir = strdup(optarg);
+			break;
+		case OP_SYSROOT:
+			free(config->sysroot);
+			config->sysroot = strdup(optarg);
+			break;
+		case OP_DISABLEDLTIMEOUT:
+			config->disable_dl_timeout = 1;
+			break;
+		case OP_VERBOSE:
+		case 'v':
+			(config->verbose)++;
+			break;
+		default:
+			return 1;
 	}
 	return 0;
 }
@@ -3692,11 +3955,11 @@ int main(int argc, char **argv)
 
 	if (*config == 4)
 	{
-		p_query(pm_targets);
+		pacman_query(pm_targets);
 	}
 	else if (*config == 5)
 	{
-		p_sync(pm_targets);
+		pacman_sync(pm_targets);
 	}
 	else
 	{

@@ -15,7 +15,7 @@
 #include <wchar.h>
 #include <wctype.h>
 #ifdef HAVE_TERMIOS_H
-#include <termios.h> /* tcflush */
+#include <termios.h> * tcflush */
 #endif
 
 #include <alpm.h>

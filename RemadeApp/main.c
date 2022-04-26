@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <stdbool.h>
 // Nothing new from package.c
 // From query.c
 #include <stdint.h>
@@ -43,9 +44,9 @@
 #include <wctype.h>
 //from reversing.c
 #include <libintl.h> //for gettext
-/* alpm */
-#include <alpm.h>
-#include <alpm_list.h>
+/* alpm */ //QUOTES FOR LOCAL HEADERS
+#include "alpm.h"
+#include "alpm_list.h"
 // SYNC_SYNCTREE IS FROM THE ORIGINAL FILE BC I CANT FIND IT
 
 /*

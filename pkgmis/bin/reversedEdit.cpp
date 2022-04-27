@@ -8,10 +8,22 @@
 #include <time.h>
 #include <sys/ioctl.h>
 #include <cstring>
-#include <string.h>
+#include <ctime>
+#include <string.h> //str
+#include <libintl.h> //gettext
+#include <dirent.h> // closedir, rewindir
+#include <sys/types.h> //closedir
 
 #include <sys/utsname.h>
 #include <getopt.h>
+
+/*
+Common errors I'm seeing:
+"too few arguments for parseconfig"- there are 0 arguments in main, needs 1.
+"invalid conversion from char to const char"- in main
+"too few arguments for alpm_option_set_logfile"
+"too few arguments for rmrf()"
+*/
 
 /*
 Functions to potentially improve:
@@ -65,6 +77,30 @@ void pm_asprintf(const char* template, char** vals) { //Print to allocated strin
     if (out == -1) {
         pm_fprintf(gettext("Error: String allocation failed!\n"));
     }
+}
+
+//Direct from pacman
+/** Parse a configuration file.
+ * @param file path to the config file
+ * @return 0 on success, non-zero on error
+ */
+int parseconfig(const char *file)
+{
+	int ret;
+	if((ret = parseconfigfile(file))) {
+		return ret;
+	}
+	if((ret = setdefaults(config))) {
+		return ret;
+	}
+	pm_printf(ALPM_LOG_DEBUG, "config: finished parsing %s\n", file);
+	if((ret = setup_libalpm())) {
+		return ret;
+	}
+	alpm_list_free_inner(config->repos, (alpm_list_fn_free) config_repo_free);
+	alpm_list_free(config->repos);
+	config->repos = NULL;
+	return ret;
 }
 
 //gets file info and writes it somewhere on the drive.
@@ -1996,7 +2032,7 @@ void sync_cleandb(char* db_dir) {
 
                 if (((restrict[24] & 0xf000) == 0x4000) || (dir_match = strcmp(restrict + buf_len + 0x8d, ".db"), dir_match != 0)) break;
 
-                if (c != 0) {
+                if (int c != 0) {
                     buf_len = strlen(dir_name);
                     dir_name = strndup(dir_name,buf_len - 3);
                     alpm_list_t* sync_dbs_temp = sync_dbs;
@@ -2081,7 +2117,7 @@ void p_sync(alpm_list_t* pm_targets) {
     } else {
         pmtransflag_t* flags;
 
-        if (trans_init(flags) != -1) {
+        if (trans_init(*flags) != -1) {
             sync_cleancache(*(short*)(config + 0x58));
             putchar(10);
             sync_cleandb_all();
@@ -2144,7 +2180,7 @@ int main(int argc, char** argv) {
     ushort** temp_arr_ref;
 
     if (stdin_no == 0) {
-        alpm_list_t* temp = alpm_list_find_str(pm_targets, '-');
+        alpm_list_t* temp = alpm_list_find_str(pm_targets, '-'); //Invalid conversion from char to const char
 
         if (temp != NULL) {
             int i = 0;
@@ -2192,7 +2228,7 @@ int main(int argc, char** argv) {
     }
 
     // Root access commands
-    parseconfig();
+    parseconfig(); //We need to input something here!
     needs_root();
 
     if (*config == 4) {

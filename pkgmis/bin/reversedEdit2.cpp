@@ -16,6 +16,8 @@
 #include <cwchar> //wcscpy()
 #include <clocale>
 #include <termios.h> //tcflush
+#include <support/xunistd.h> //xwrite
+#include <support/check.h>
 
 #inlcude <sys/stat.h> //lstat
 #include <sys/utsname.h>
@@ -2206,6 +2208,7 @@ void p_sync(alpm_list_t* pm_targets) {
 }
 
 //from testpkg.c
+//ignoring main for now.
 int main(int argc, char** argv) {
     // Set up signals
     struct sigaction new_action, old_action; 

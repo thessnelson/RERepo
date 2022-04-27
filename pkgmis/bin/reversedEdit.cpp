@@ -79,6 +79,79 @@ void pm_asprintf(const char* template, char** vals) { //Print to allocated strin
     }
 }
 
+/* output a string, but wrap words properly with a specified indentation
+ */
+void indentprint(const char *str, unsigned short indent, unsigned short cols)
+{
+	wchar_t *wcstr;
+	const wchar_t *p;
+	size_t len, cidx;
+
+	if (!str)
+	{
+		return;
+	}
+
+	/* if we're not a tty, or our tty is not wide enough that wrapping even makes
+	 * sense, print without indenting */
+	if (cols == 0 || indent > cols)
+	{
+		fputs(str, stdout);
+		return;
+	}
+
+	len = strlen(str) + 1;
+	wcstr = calloc(len, sizeof(wchar_t));
+	len = mbstowcs(wcstr, str, len);
+	p = wcstr;
+	cidx = indent;
+
+	if (!p || !len)
+	{
+		free(wcstr);
+		return;
+	}
+
+	while (*p)
+	{
+		if (*p == L' ')
+		{
+			const wchar_t *q, *next;
+			p++;
+			if (p == NULL || *p == L' ')
+				continue;
+			next = wcschr(p, L' ');
+			if (next == NULL)
+			{
+				next = p + wcslen(p);
+			}
+			/* len captures # cols */
+			len = 0;
+			q = p;
+			while (q < next)
+			{
+				len += wcwidth(*q++);
+			}
+			if ((len + 1) > (cols - cidx))
+			{
+				/* wrap to a newline and reindent */
+				printf("\n%-*s", (int)indent, "");
+				cidx = indent;
+			}
+			else
+			{
+				printf(" ");
+				cidx++;
+			}
+			continue;
+		}
+		printf("%lc", (wint_t)*p);
+		cidx += wcwidth(*p);
+		p++;
+	}
+	free(wcstr);
+}
+
 //Direct from pacman
 /** Parse a configuration file.
  * @param file path to the config file

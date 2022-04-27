@@ -18,7 +18,7 @@
 #include <getopt.h>
 
 /*
-Common errors I'm seeing: yep.
+Common errors I'm seeing:
 "too few arguments for parseconfig"- there are 0 arguments in main, needs 1.
 "invalid conversion from char to const char"- in main
 "too few arguments for alpm_option_set_logfile"
@@ -1566,7 +1566,7 @@ void cb_trans_progress(ulong input, int c, char *str, size_t len, alpm_list_t* i
     if (c == 100) {
         on_progress = 0;
 
-        for (k = output; k != 0x0; k = alpm_list_next(k)) {
+        for (int k = output; k != 0x0; k = alpm_list_next(k)) {
             printf("%s", *k);
         }
 
@@ -1754,7 +1754,7 @@ void sync_info(alpm_list_t* pm_targets, char** syncdb) {
             else {
                 *pkg_name = '\0';
 
-                for (; l = 0, j != 0; j = alpm_list_next(j)) {
+                for (int l = 0, j != 0; j = alpm_list_next(j)) {
                     pmdb_t* l = alpm_list_getdata(j);
                     char* db_name = (char *)alpm_db_get_name(l);
                     int pkg_name_match = strcmp(buf,db_name);

@@ -635,7 +635,7 @@ void list_display_linebreak(char* field, alpm_list_t* list) {
     }
     
     if (list == 0) {
-        puts('None');
+        puts("None");
     } else {
         indentprint(alpm_list_getdata(list), n);
         putchar(10);
@@ -941,10 +941,6 @@ void display(pmpkg_t* pkg_data) {
             puts((char *)alpm_pkg_get_name(pkg_data));
         }
     }
-}
-
-char* mbasename(char* input) {
-    return strrchr(input, '/');
 }
 
 //cannot find this one yet. Still looking! I know it's in query

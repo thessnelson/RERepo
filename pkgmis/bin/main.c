@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <unistd.h>
 #include <wchar.h>
+#include <wctype.h>
 
 #ifdef HAVE_TERMIOS_H
 #include <termios.h> * tcflush */
@@ -365,7 +366,7 @@ void cb_event(void *ctx, alpm_event_t *event)
 			break;
 		case ALPM_EVENT_DATABASE_MISSING:
 			if(!config->op_s_sync) {
-				pm_printf(ALPM_LOG_WARNING,
+				pm_printf(PM_LOG_WARNING,
 						"database file for '%s' does not exist (use '%s' to download)\n",
 						event->database_missing.dbname,
 						config->op == PM_OP_FILES ? "-Fy": "-Sy");
@@ -376,13 +377,13 @@ void cb_event(void *ctx, alpm_event_t *event)
 				alpm_event_pacnew_created_t *e = &event->pacnew_created;
 				if(on_progress) {
 					char *string = NULL;
-					pm_sprintf(&string, ALPM_LOG_WARNING, _("%s installed as %s.pacnew\n"),
+					pm_sprintf(&string, PM_LOG_WARNING, _("%s installed as %s.pacnew\n"),
 							e->file, e->file);
 					if(string != NULL) {
 						output = alpm_list_add(output, string);
 					}
 				} else {
-					pm_printf(ALPM_LOG_WARNING, _("%s installed as %s.pacnew\n"),
+					pm_printf(PM_LOG_WARNING, _("%s installed as %s.pacnew\n"),
 							e->file, e->file);
 				}
 			}
@@ -392,13 +393,13 @@ void cb_event(void *ctx, alpm_event_t *event)
 				alpm_event_pacsave_created_t *e = &event->pacsave_created;
 				if(on_progress) {
 					char *string = NULL;
-					pm_sprintf(&string, ALPM_LOG_WARNING, _("%s saved as %s.pacsave\n"),
+					pm_sprintf(&string, PM_LOG_WARNING, _("%s saved as %s.pacsave\n"),
 							e->file, e->file);
 					if(string != NULL) {
 						output = alpm_list_add(output, string);
 					}
 				} else {
-					pm_printf(ALPM_LOG_WARNING, _("%s saved as %s.pacsave\n"),
+					pm_printf(PM_LOG_WARNING, _("%s saved as %s.pacsave\n"),
 							e->file, e->file);
 				}
 			}
@@ -1124,13 +1125,13 @@ void cb_download(void *ctx, const char *filename, alpm_download_event_type_t eve
 	} else if(event == ALPM_DOWNLOAD_COMPLETED) {
 		dload_complete_event(filename, data);
 	} else {
-		pm_printf(ALPM_LOG_ERROR, _("unknown callback event type %d for %s\n"),
+		pm_printf(PM_LOG_ERROR, _("unknown callback event type %d for %s\n"),
 				event, filename);
 	}
 }
 
 /* Callback to handle notifications from the library */
-void cb_log(void *ctx, alpm_loglevel_t level, const char *fmt, va_list args)
+void cb_log(void *ctx, pm_loglevel_t level, const char *fmt, va_list args)
 {
 	(void)ctx;
 	if(!fmt || strlen(fmt) == 0) {
@@ -1139,7 +1140,7 @@ void cb_log(void *ctx, alpm_loglevel_t level, const char *fmt, va_list args)
 
 	if(on_progress) {
 		char *string = NULL;
-		pm_vasprintf(&string, level, fmt, args);
+		pm_vsprintf(&string, level, fmt, args);
 		if(string != NULL) {
 			output = alpm_list_add(output, string);
 		}
@@ -1166,7 +1167,7 @@ static int check_file_exists(const char *pkgname, char *filepath, size_t rootlen
 			if(config->quiet) {
 				printf("%s %s\n", pkgname, filepath);
 			} else {
-				pm_printf(ALPM_LOG_WARNING, "%s: %s (%s)\n",
+				pm_printf(PM_LOG_WARNING, "%s: %s (%s)\n",
 						pkgname, filepath, strerror(errno));
 			}
 			return 1;
@@ -1188,7 +1189,7 @@ static int check_file_type(const char *pkgname, const char *filepath,
 		if(config->quiet) {
 			printf("%s %s\n", pkgname, filepath);
 		} else {
-			pm_printf(ALPM_LOG_WARNING, _("%s: %s (File type mismatch)\n"),
+			pm_printf(PM_LOG_WARNING, _("%s: %s (File type mismatch)\n"),
 					pkgname, filepath);
 		}
 		return 1;
@@ -1207,7 +1208,7 @@ static int check_file_permissions(const char *pkgname, const char *filepath,
 	if(st->st_uid != archive_entry_uid(entry)) {
 		errors++;
 		if(!config->quiet) {
-			pm_printf(ALPM_LOG_WARNING, _("%s: %s (UID mismatch)\n"),
+			pm_printf(PM_LOG_WARNING, _("%s: %s (UID mismatch)\n"),
 					pkgname, filepath);
 		}
 	}
@@ -1216,7 +1217,7 @@ static int check_file_permissions(const char *pkgname, const char *filepath,
 	if(st->st_gid != archive_entry_gid(entry)) {
 		errors++;
 		if(!config->quiet) {
-			pm_printf(ALPM_LOG_WARNING, _("%s: %s (GID mismatch)\n"),
+			pm_printf(PM_LOG_WARNING, _("%s: %s (GID mismatch)\n"),
 					pkgname, filepath);
 		}
 	}
@@ -1226,7 +1227,7 @@ static int check_file_permissions(const char *pkgname, const char *filepath,
 	if(fsmode != (~AE_IFMT & archive_entry_mode(entry))) {
 		errors++;
 		if(!config->quiet) {
-			pm_printf(ALPM_LOG_WARNING, _("%s: %s (Permissions mismatch)\n"),
+			pm_printf(PM_LOG_WARNING, _("%s: %s (Permissions mismatch)\n"),
 					pkgname, filepath);
 		}
 	}
@@ -1248,7 +1249,7 @@ static int check_file_time(const char *pkgname, const char *filepath,
 			return 0;
 		}
 		if(!config->quiet) {
-			pm_printf(ALPM_LOG_WARNING, _("%s: %s (Modification time mismatch)\n"),
+			pm_printf(PM_LOG_WARNING, _("%s: %s (Modification time mismatch)\n"),
 					pkgname, filepath);
 		}
 		return 1;
@@ -1265,14 +1266,14 @@ static int check_file_link(const char *pkgname, const char *filepath,
 
 	if(readlink(filepath, link, length) != st->st_size) {
 		/* this should not happen */
-		pm_printf(ALPM_LOG_ERROR, _("unable to read symlink contents: %s\n"), filepath);
+		pm_printf(PM_LOG_ERROR, _("unable to read symlink contents: %s\n"), filepath);
 		return 1;
 	}
 	link[length - 1] = '\0';
 
 	if(strcmp(link, archive_entry_symlink(entry)) != 0) {
 		if(!config->quiet) {
-			pm_printf(ALPM_LOG_WARNING, _("%s: %s (Symlink path mismatch)\n"),
+			pm_printf(PM_LOG_WARNING, _("%s: %s (Symlink path mismatch)\n"),
 					pkgname, filepath);
 		}
 		return 1;
@@ -1295,7 +1296,7 @@ static int check_file_size(const char *pkgname, const char *filepath,
 			return 0;
 		}
 		if(!config->quiet) {
-			pm_printf(ALPM_LOG_WARNING, _("%s: %s (Size mismatch)\n"),
+			pm_printf(PM_LOG_WARNING, _("%s: %s (Size mismatch)\n"),
 					pkgname, filepath);
 		}
 		return 1;
@@ -1310,7 +1311,7 @@ static int check_file_cksum(const char *pkgname, const char *filepath,
 {
 	if(!cksum_calc) {
 		if(!config->quiet) {
-			pm_printf(ALPM_LOG_WARNING, _("%s: %s (failed to calculate %s checksum)\n"),
+			pm_printf(PM_LOG_WARNING, _("%s: %s (failed to calculate %s checksum)\n"),
 					pkgname, filepath, cksum_name);
 		}
 		return 1;
@@ -1318,7 +1319,7 @@ static int check_file_cksum(const char *pkgname, const char *filepath,
 
 	if(!cksum_mtree) {
 		if(!config->quiet) {
-			pm_printf(ALPM_LOG_WARNING, _("%s: %s (%s checksum information not available)\n"),
+			pm_printf(PM_LOG_WARNING, _("%s: %s (%s checksum information not available)\n"),
 					pkgname, filepath, cksum_name);
 		}
 		return 1;
@@ -1335,7 +1336,7 @@ static int check_file_cksum(const char *pkgname, const char *filepath,
 			return 0;
 		}
 		if(!config->quiet) {
-			pm_printf(ALPM_LOG_WARNING, _("%s: %s (%s checksum mismatch)\n"),
+			pm_printf(PM_LOG_WARNING, _("%s: %s (%s checksum mismatch)\n"),
 					pkgname, filepath, cksum_name);
 		}
 		return 1;
@@ -1378,7 +1379,7 @@ static int check_file_sha256sum(const char *pkgname, const char *filepath,
 }
 
 /* Loop through the files of the package to check if they exist. */
-int check_pkg_fast(alpm_pkg_t *pkg)
+int check_pkg_fast(pmpkg_t *pkg)
 {
 	const char *root, *pkgname;
 	size_t errors = 0;
@@ -1391,7 +1392,7 @@ int check_pkg_fast(alpm_pkg_t *pkg)
 	rootlen = strlen(root);
 	if(rootlen + 1 > PATH_MAX) {
 		/* we are in trouble here */
-		pm_printf(ALPM_LOG_ERROR, _("path too long: %s%s\n"), root, "");
+		pm_printf(PM_LOG_ERROR, _("path too long: %s%s\n"), root, "");
 		return 1;
 	}
 	strcpy(filepath, root);
@@ -1406,7 +1407,7 @@ int check_pkg_fast(alpm_pkg_t *pkg)
 		size_t plen = strlen(path);
 
 		if(rootlen + 1 + plen > PATH_MAX) {
-			pm_printf(ALPM_LOG_WARNING, _("path too long: %s%s\n"), root, path);
+			pm_printf(PM_LOG_WARNING, _("path too long: %s%s\n"), root, path);
 			continue;
 		}
 		strcpy(filepath + rootlen, path);
@@ -1416,7 +1417,7 @@ int check_pkg_fast(alpm_pkg_t *pkg)
 			int expect_dir = path[plen - 1] == '/' ? 1 : 0;
 			int is_dir = S_ISDIR(st.st_mode) ? 1 : 0;
 			if(expect_dir != is_dir) {
-				pm_printf(ALPM_LOG_WARNING, _("%s: %s (File type mismatch)\n"),
+				pm_printf(PM_LOG_WARNING, _("%s: %s (File type mismatch)\n"),
 						pkgname, filepath);
 				++errors;
 			}
@@ -1436,7 +1437,7 @@ int check_pkg_fast(alpm_pkg_t *pkg)
 }
 
 /* Loop though files in a package and perform full file property checking. */
-int check_pkg_full(alpm_pkg_t *pkg)
+int check_pkg_full(pmpkg_t *pkg)
 {
 	const char *root, *pkgname;
 	size_t errors = 0;
@@ -1450,7 +1451,7 @@ int check_pkg_full(alpm_pkg_t *pkg)
 	rootlen = strlen(root);
 	if(rootlen + 1 > PATH_MAX) {
 		/* we are in trouble here */
-		pm_printf(ALPM_LOG_ERROR, _("path too long: %s%s\n"), root, "");
+		pm_printf(PM_LOG_ERROR, _("path too long: %s%s\n"), root, "");
 		return 1;
 	}
 
@@ -1496,7 +1497,7 @@ int check_pkg_full(alpm_pkg_t *pkg)
 					alpm_option_get_dbpath(config->handle),
 					pkgname, alpm_pkg_get_version(pkg), dbfile);
 			if(filepath_len >= PATH_MAX) {
-				pm_printf(ALPM_LOG_WARNING, _("path too long: %slocal/%s-%s/%s\n"),
+				pm_printf(PM_LOG_WARNING, _("path too long: %slocal/%s-%s/%s\n"),
 						alpm_option_get_dbpath(config->handle),
 						pkgname, alpm_pkg_get_version(pkg), dbfile);
 				continue;
@@ -1504,7 +1505,7 @@ int check_pkg_full(alpm_pkg_t *pkg)
 		} else {
 			filepath_len = snprintf(filepath, PATH_MAX, "%s%s", root, path);
 			if(filepath_len >= PATH_MAX) {
-				pm_printf(ALPM_LOG_WARNING, _("path too long: %s%s\n"), root, path);
+				pm_printf(PM_LOG_WARNING, _("path too long: %s%s\n"), root, path);
 				continue;
 			}
 		}
@@ -1523,7 +1524,7 @@ int check_pkg_full(alpm_pkg_t *pkg)
 		type = archive_entry_filetype(entry);
 
 		if(type != AE_IFDIR && type != AE_IFREG && type != AE_IFLNK) {
-			pm_printf(ALPM_LOG_WARNING, _("file type not recognized: %s%s\n"), root, path);
+			pm_printf(PM_LOG_WARNING, _("file type not recognized: %s%s\n"), root, path);
 			continue;
 		}
 
@@ -1644,7 +1645,7 @@ config_t *config_new(void)
 {
 	config_t *newconfig = calloc(1, sizeof(config_t));
 	if(!newconfig) {
-		pm_printf(ALPM_LOG_ERROR,
+		pm_printf(PM_LOG_ERROR,
 				_n("malloc failure: could not allocate %zu byte\n",
 				   "malloc failure: could not allocate %zu bytes\n", sizeof(config_t)),
 				sizeof(config_t));
@@ -1652,7 +1653,7 @@ config_t *config_new(void)
 	}
 	/* defaults which may get overridden later */
 	newconfig->op = PM_OP_MAIN;
-	newconfig->logmask = ALPM_LOG_ERROR | ALPM_LOG_WARNING;
+	newconfig->logmask = PM_LOG_ERROR | PM_LOG_WARNING;
 	newconfig->configfile = strdup(CONFFILE);
 	if(alpm_capabilities() & ALPM_CAPABILITY_SIGNATURES) {
 		newconfig->siglevel = ALPM_SIG_PACKAGE | ALPM_SIG_PACKAGE_OPTIONAL |
@@ -1857,7 +1858,7 @@ static int download_with_xfercommand(void *ctx, const char *url,
 
 	if((argv = calloc(config->xfercommand_argc + 1, sizeof(char*))) == NULL) {
 		size_t bytes = (config->xfercommand_argc + 1) * sizeof(char*);
-		pm_printf(ALPM_LOG_ERROR,
+		pm_printf(PM_LOG_ERROR,
 				_n("malloc failure: could not allocate %zu byte\n",
 				   "malloc failure: could not allocate %zu bytes\n",
 					 bytes),
@@ -1881,31 +1882,31 @@ static int download_with_xfercommand(void *ctx, const char *url,
 		cwdfd = open(".", O_RDONLY);
 	} while(cwdfd == -1 && errno == EINTR);
 	if(cwdfd < 0) {
-		pm_printf(ALPM_LOG_ERROR, _("could not get current working directory\n"));
+		pm_printf(PM_LOG_ERROR, _("could not get current working directory\n"));
 	}
 
 	/* cwd to the download directory */
 	if(chdir(localpath)) {
-		pm_printf(ALPM_LOG_WARNING, _("could not chdir to download directory %s\n"), localpath);
+		pm_printf(PM_LOG_WARNING, _("could not chdir to download directory %s\n"), localpath);
 		ret = -1;
 		goto cleanup;
 	}
 
-	if(config->logmask & ALPM_LOG_DEBUG) {
+	if(config->logmask & PM_LOG_DEBUG) {
 		char *cmd = arg_to_string(config->xfercommand_argc, (char**)argv);
 		if(cmd) {
-			pm_printf(ALPM_LOG_DEBUG, "running command: %s\n", cmd);
+			pm_printf(PM_LOG_DEBUG, "running command: %s\n", cmd);
 			free(cmd);
 		}
 	}
 	retval = systemvp(argv[0], (char**)argv);
 
 	if(retval == -1) {
-		pm_printf(ALPM_LOG_WARNING, _("running XferCommand: fork failed!\n"));
+		pm_printf(PM_LOG_WARNING, _("running XferCommand: fork failed!\n"));
 		ret = -1;
 	} else if(retval != 0) {
 		/* download failed */
-		pm_printf(ALPM_LOG_DEBUG, "XferCommand command returned non-zero status "
+		pm_printf(PM_LOG_DEBUG, "XferCommand command returned non-zero status "
 				"code (%d)\n", retval);
 		ret = -1;
 	} else {
@@ -1913,7 +1914,7 @@ static int download_with_xfercommand(void *ctx, const char *url,
 		ret = 0;
 		if(usepart) {
 			if(rename(tempfile, destfile)) {
-				pm_printf(ALPM_LOG_ERROR, _("could not rename %s to %s (%s)\n"),
+				pm_printf(PM_LOG_ERROR, _("could not rename %s to %s (%s)\n"),
 						tempfile, destfile, strerror(errno));
 				ret = -1;
 			}
@@ -1924,7 +1925,7 @@ cleanup:
 	/* restore the old cwd if we have it */
 	if(cwdfd >= 0) {
 		if(fchdir(cwdfd) != 0) {
-			pm_printf(ALPM_LOG_ERROR, _("could not restore working directory (%s)\n"),
+			pm_printf(PM_LOG_ERROR, _("could not restore working directory (%s)\n"),
 					strerror(errno));
 		}
 		close(cwdfd);
@@ -1953,7 +1954,7 @@ int config_add_architecture(char *arch)
 		arch = newarch;
 	}
 
-	pm_printf(ALPM_LOG_DEBUG, "config: arch: %s\n", arch);
+	pm_printf(PM_LOG_DEBUG, "config: arch: %s\n", arch);
 	config->architectures = alpm_list_add(config->architectures, arch);
 	return 0;
 }
@@ -2061,7 +2062,7 @@ static int process_siglevel(alpm_list_t *values, int *storage,
 				SLSET(ALPM_SIG_DATABASE_MARGINAL_OK | ALPM_SIG_DATABASE_UNKNOWN_OK);
 			}
 		} else {
-			pm_printf(ALPM_LOG_ERROR,
+			pm_printf(PM_LOG_ERROR,
 					_("config file %s, line %d: invalid value for '%s' : '%s'\n"),
 					file, linenum, "SigLevel", original);
 			ret = 1;
@@ -2075,7 +2076,7 @@ static int process_siglevel(alpm_list_t *values, int *storage,
 	/* ensure we have sig checking ability and are actually turning it on */
 	if(!(alpm_capabilities() & ALPM_CAPABILITY_SIGNATURES) &&
 			level & (ALPM_SIG_PACKAGE | ALPM_SIG_DATABASE)) {
-		pm_printf(ALPM_LOG_ERROR,
+		pm_printf(PM_LOG_ERROR,
 				_("config file %s, line %d: '%s' option invalid, no signature support\n"),
 				file, linenum, "SigLevel");
 		ret = 1;
@@ -2110,7 +2111,7 @@ static int process_cleanmethods(alpm_list_t *values,
 		} else if(strcmp(value, "KeepCurrent") == 0) {
 			config->cleanmethod |= PM_CLEAN_KEEPCUR;
 		} else {
-			pm_printf(ALPM_LOG_ERROR,
+			pm_printf(PM_LOG_ERROR,
 					_("config file %s, line %d: invalid value for '%s' : '%s'\n"),
 					file, linenum, "CleanMethod", value);
 			return 1;
@@ -2134,7 +2135,7 @@ static void setrepeatingoption(char *ptr, const char *option,
 	val = strtok_r(ptr, " ", &saveptr);
 	while(val) {
 		*list = alpm_list_add(*list, strdup(val));
-		pm_printf(ALPM_LOG_DEBUG, "config: %s: %s\n", option, val);
+		pm_printf(PM_LOG_DEBUG, "config: %s: %s\n", option, val);
 		val = strtok_r(NULL, " ", &saveptr);
 	}
 }
@@ -2146,13 +2147,13 @@ static int _parse_options(const char *key, char *value,
 		/* options without settings */
 		if(strcmp(key, "UseSyslog") == 0) {
 			config->usesyslog = 1;
-			pm_printf(ALPM_LOG_DEBUG, "config: usesyslog\n");
+			pm_printf(PM_LOG_DEBUG, "config: usesyslog\n");
 		} else if(strcmp(key, "ILoveCandy") == 0) {
 			config->chomp = 1;
-			pm_printf(ALPM_LOG_DEBUG, "config: chomp\n");
+			pm_printf(PM_LOG_DEBUG, "config: chomp\n");
 		} else if(strcmp(key, "VerbosePkgLists") == 0) {
 			config->verbosepkglists = 1;
-			pm_printf(ALPM_LOG_DEBUG, "config: verbosepkglists\n");
+			pm_printf(PM_LOG_DEBUG, "config: verbosepkglists\n");
 		} else if(strcmp(key, "CheckSpace") == 0) {
 			config->checkspace = 1;
 		} else if(strcmp(key, "Color") == 0) {
@@ -2165,7 +2166,7 @@ static int _parse_options(const char *key, char *value,
 		} else if(strcmp(key, "DisableDownloadTimeout") == 0) {
 			config->disable_dl_timeout = 1;
 		} else {
-			pm_printf(ALPM_LOG_WARNING,
+			pm_printf(PM_LOG_WARNING,
 					_("config file %s, line %d: directive '%s' in section '%s' not recognized.\n"),
 					file, linenum, key, "options");
 		}
@@ -2196,28 +2197,28 @@ static int _parse_options(const char *key, char *value,
 			/* don't overwrite a path specified on the command line */
 			if(!config->dbpath) {
 				config->dbpath = strdup(value);
-				pm_printf(ALPM_LOG_DEBUG, "config: dbpath: %s\n", value);
+				pm_printf(PM_LOG_DEBUG, "config: dbpath: %s\n", value);
 			}
 		} else if(strcmp(key, "RootDir") == 0) {
 			/* don't overwrite a path specified on the command line */
 			if(!config->rootdir) {
 				config->rootdir = strdup(value);
-				pm_printf(ALPM_LOG_DEBUG, "config: rootdir: %s\n", value);
+				pm_printf(PM_LOG_DEBUG, "config: rootdir: %s\n", value);
 			}
 		} else if(strcmp(key, "GPGDir") == 0) {
 			if(!config->gpgdir) {
 				config->gpgdir = strdup(value);
-				pm_printf(ALPM_LOG_DEBUG, "config: gpgdir: %s\n", value);
+				pm_printf(PM_LOG_DEBUG, "config: gpgdir: %s\n", value);
 			}
 		} else if(strcmp(key, "LogFile") == 0) {
 			if(!config->logfile) {
 				config->logfile = strdup(value);
-				pm_printf(ALPM_LOG_DEBUG, "config: logfile: %s\n", value);
+				pm_printf(PM_LOG_DEBUG, "config: logfile: %s\n", value);
 			}
 		} else if(strcmp(key, "XferCommand") == 0) {
 			char **c;
 			if((config->xfercommand_argv = wordsplit(value)) == NULL) {
-				pm_printf(ALPM_LOG_ERROR,
+				pm_printf(PM_LOG_ERROR,
 						_("config file %s, line %d: invalid value for '%s' : '%s'\n"),
 						file, linenum, "XferCommand", value);
 				return 1;
@@ -2227,7 +2228,7 @@ static int _parse_options(const char *key, char *value,
 				config->xfercommand_argc++;
 			}
 			config->xfercommand = strdup(value);
-			pm_printf(ALPM_LOG_DEBUG, "config: xfercommand: %s\n", value);
+			pm_printf(PM_LOG_DEBUG, "config: xfercommand: %s\n", value);
 		} else if(strcmp(key, "CleanMethod") == 0) {
 			alpm_list_t *methods = NULL;
 			setrepeatingoption(value, "CleanMethod", &methods);
@@ -2269,21 +2270,21 @@ static int _parse_options(const char *key, char *value,
 
 			err = parse_number(value, &number);
 			if(err) {
-				pm_printf(ALPM_LOG_ERROR,
+				pm_printf(PM_LOG_ERROR,
 						_("config file %s, line %d: invalid value for '%s' : '%s'\n"),
 						file, linenum, "ParallelDownloads", value);
 				return 1;
 			}
 
 			if(number < 1) {
-				pm_printf(ALPM_LOG_ERROR,
+				pm_printf(PM_LOG_ERROR,
 						_("config file %s, line %d: value for '%s' has to be positive : '%s'\n"),
 						file, linenum, "ParallelDownloads", value);
 				return 1;
 			}
 
 			if(number > INT_MAX) {
-				pm_printf(ALPM_LOG_ERROR,
+				pm_printf(PM_LOG_ERROR,
 						_("config file %s, line %d: value for '%s' is too large : '%s'\n"),
 						file, linenum, "ParallelDownloads", value);
 				return 1;
@@ -2291,7 +2292,7 @@ static int _parse_options(const char *key, char *value,
 
 			config->parallel_downloads = number;
 		} else {
-			pm_printf(ALPM_LOG_WARNING,
+			pm_printf(PM_LOG_WARNING,
 					_("config file %s, line %d: directive '%s' in section '%s' not recognized.\n"),
 					file, linenum, key, "options");
 		}
@@ -2303,7 +2304,7 @@ static int _parse_options(const char *key, char *value,
 static char *replace_server_vars(config_t *c, config_repo_t *r, const char *s)
 {
 	if(c->architectures == NULL && strstr(s, "$arch")) {
-		pm_printf(ALPM_LOG_ERROR,
+		pm_printf(PM_LOG_ERROR,
 				_("mirror '%s' contains the '%s' variable, but no '%s' is defined.\n"),
 				s, "$arch", "Architecture");
 		return NULL;
@@ -2327,11 +2328,11 @@ static char *replace_server_vars(config_t *c, config_repo_t *r, const char *s)
 	}
 }
 
-static int _add_mirror(alpm_db_t *db, char *value)
+static int _add_mirror(pmdb_t *db, char *value)
 {
 	if(alpm_db_add_server(db, value) != 0) {
 		/* pm_errno is set by alpm_db_setserver */
-		pm_printf(ALPM_LOG_ERROR, _("could not add server URL to database '%s': %s (%s)\n"),
+		pm_printf(PM_LOG_ERROR, _("could not add server URL to database '%s': %s (%s)\n"),
 				alpm_db_get_name(db), value, alpm_strerror(alpm_errno(config->handle)));
 		return 1;
 	}
@@ -2342,16 +2343,16 @@ static int _add_mirror(alpm_db_t *db, char *value)
 static int register_repo(config_repo_t *repo)
 {
 	alpm_list_t *i;
-	alpm_db_t *db;
+	pmdb_t *db;
 
 	db = alpm_register_syncdb(config->handle, repo->name, repo->siglevel);
 	if(db == NULL) {
-		pm_printf(ALPM_LOG_ERROR, _("could not register '%s' database (%s)\n"),
+		pm_printf(PM_LOG_ERROR, _("could not register '%s' database (%s)\n"),
 				repo->name, alpm_strerror(alpm_errno(config->handle)));
 		return 1;
 	}
 
-	pm_printf(ALPM_LOG_DEBUG, "setting usage of %d for %s repository\n",
+	pm_printf(PM_LOG_DEBUG, "setting usage of %d for %s repository\n",
 			repo->usage, repo->name);
 	alpm_db_set_usage(db, repo->usage);
 
@@ -2377,12 +2378,12 @@ static int setup_libalpm(void)
 	alpm_handle_t *handle;
 	alpm_list_t *i;
 
-	pm_printf(ALPM_LOG_DEBUG, "setup_libalpm called\n");
+	pm_printf(PM_LOG_DEBUG, "setup_libalpm called\n");
 
 	/* initialize library */
 	handle = alpm_initialize(config->rootdir, config->dbpath, &err);
 	if(!handle) {
-		pm_printf(ALPM_LOG_ERROR, _("failed to initialize alpm library:\n(root: %s, dbpath: %s)\n%s\n"),
+		pm_printf(PM_LOG_ERROR, _("failed to initialize alpm library:\n(root: %s, dbpath: %s)\n%s\n"),
 		        config->rootdir, config->dbpath, alpm_strerror(err));
 		if(err == ALPM_ERR_DB_VERSION) {
 			fprintf(stderr, _("try running pacman-db-upgrade\n"));
@@ -2403,7 +2404,7 @@ static int setup_libalpm(void)
 
 	ret = alpm_option_set_logfile(handle, config->logfile);
 	if(ret != 0) {
-		pm_printf(ALPM_LOG_ERROR, _("problem setting logfile '%s' (%s)\n"),
+		pm_printf(PM_LOG_ERROR, _("problem setting logfile '%s' (%s)\n"),
 				config->logfile, alpm_strerror(alpm_errno(handle)));
 		return ret;
 	}
@@ -2412,7 +2413,7 @@ static int setup_libalpm(void)
 	 * rootdir is defined. Reasoning: gpgdir contains configuration data. */
 	ret = alpm_option_set_gpgdir(handle, config->gpgdir);
 	if(ret != 0) {
-		pm_printf(ALPM_LOG_ERROR, _("problem setting gpgdir '%s' (%s)\n"),
+		pm_printf(PM_LOG_ERROR, _("problem setting gpgdir '%s' (%s)\n"),
 				config->gpgdir, alpm_strerror(alpm_errno(handle)));
 		return ret;
 	}
@@ -2422,7 +2423,7 @@ static int setup_libalpm(void)
 	/* add hook directories 1-by-1 to avoid overwriting the system directory */
 	for(i = config->hookdirs; i; i = alpm_list_next(i)) {
 		if((ret = alpm_option_add_hookdir(handle, i->data)) != 0) {
-			pm_printf(ALPM_LOG_ERROR, _("problem adding hookdir '%s' (%s)\n"),
+			pm_printf(PM_LOG_ERROR, _("problem adding hookdir '%s' (%s)\n"),
 					(char *) i->data, alpm_strerror(alpm_errno(handle)));
 			return ret;
 		}
@@ -2444,7 +2445,7 @@ static int setup_libalpm(void)
 	if(config->xfercommand) {
 		alpm_option_set_fetchcb(handle, download_with_xfercommand, NULL);
 	} else if(!(alpm_capabilities() & ALPM_CAPABILITY_DOWNLOADER)) {
-		pm_printf(ALPM_LOG_WARNING, _("no '%s' configured\n"), "XferCommand");
+		pm_printf(PM_LOG_WARNING, _("no '%s' configured\n"), "XferCommand");
 	}
 
 	alpm_option_set_architectures(handle, config->architectures);
@@ -2461,16 +2462,16 @@ static int setup_libalpm(void)
 
 	for(i = config->assumeinstalled; i; i = i->next) {
 		char *entry = i->data;
-		alpm_depend_t *dep = alpm_dep_from_string(entry);
+		pmdepend_t *dep = alpm_dep_from_string(entry);
 		if(!dep) {
 			return 1;
 		}
-		pm_printf(ALPM_LOG_DEBUG, "parsed assume installed: %s %s\n", dep->name, dep->version);
+		pm_printf(PM_LOG_DEBUG, "parsed assume installed: %s %s\n", dep->name, dep->version);
 
 		ret = alpm_option_add_assumeinstalled(handle, dep);
 		alpm_dep_free(dep);
 		if(ret) {
-			pm_printf(ALPM_LOG_ERROR, _("Failed to pass %s entry to libalpm"), "assume-installed");
+			pm_printf(PM_LOG_ERROR, _("Failed to pass %s entry to libalpm"), "assume-installed");
 			return ret;
 		}
 	 }
@@ -2509,7 +2510,7 @@ static int process_usage(alpm_list_t *values, int *usage,
 		} else if(strcmp(key, "All") == 0) {
 			level |= ALPM_DB_USAGE_ALL;
 		} else {
-			pm_printf(ALPM_LOG_ERROR,
+			pm_printf(PM_LOG_ERROR,
 					_("config file %s, line %d: '%s' option '%s' not recognized\n"),
 					file, linenum, "Usage", key);
 			ret = 1;
@@ -2530,7 +2531,7 @@ static int _parse_repo(const char *key, char *value, const char *file,
 
 #define CHECK_VALUE(val) do { \
 	if(!val) { \
-		pm_printf(ALPM_LOG_ERROR, _("config file %s, line %d: directive '%s' needs a value\n"), \
+		pm_printf(PM_LOG_ERROR, _("config file %s, line %d: directive '%s' needs a value\n"), \
 				file, line, key); \
 		return 1; \
 	} \
@@ -2560,7 +2561,7 @@ static int _parse_repo(const char *key, char *value, const char *file,
 			FREELIST(values);
 		}
 	} else {
-		pm_printf(ALPM_LOG_WARNING,
+		pm_printf(PM_LOG_WARNING,
 				_("config file %s, line %d: directive '%s' in section '%s' not recognized.\n"),
 				file, line, key, repo->name);
 	}
@@ -2583,13 +2584,13 @@ static int process_include(const char *value, void *data,
 	static const int config_max_recursion = 10;
 
 	if(value == NULL) {
-		pm_printf(ALPM_LOG_ERROR, _("config file %s, line %d: directive '%s' needs a value\n"),
+		pm_printf(PM_LOG_ERROR, _("config file %s, line %d: directive '%s' needs a value\n"),
 				file, linenum, "Include");
 		return 1;
 	}
 
 	if(section->depth >= config_max_recursion) {
-		pm_printf(ALPM_LOG_ERROR,
+		pm_printf(PM_LOG_ERROR,
 				_("config parsing exceeded max recursion depth of %d.\n"),
 				config_max_recursion);
 		return 1;
@@ -2601,23 +2602,23 @@ static int process_include(const char *value, void *data,
 	globret = glob(value, GLOB_NOCHECK, NULL, &globbuf);
 	switch(globret) {
 		case GLOB_NOSPACE:
-			pm_printf(ALPM_LOG_DEBUG,
+			pm_printf(PM_LOG_DEBUG,
 					"config file %s, line %d: include globbing out of space\n",
 					file, linenum);
 			break;
 		case GLOB_ABORTED:
-			pm_printf(ALPM_LOG_DEBUG,
+			pm_printf(PM_LOG_DEBUG,
 					"config file %s, line %d: include globbing read error for %s\n",
 					file, linenum, value);
 			break;
 		case GLOB_NOMATCH:
-			pm_printf(ALPM_LOG_DEBUG,
+			pm_printf(PM_LOG_DEBUG,
 					"config file %s, line %d: no include found for %s\n",
 					file, linenum, value);
 			break;
 		default:
 			for(gindex = 0; gindex < globbuf.gl_pathc; gindex++) {
-				pm_printf(ALPM_LOG_DEBUG, "config file %s, line %d: including %s\n",
+				pm_printf(PM_LOG_DEBUG, "config file %s, line %d: including %s\n",
 						file, linenum, globbuf.gl_pathv[gindex]);
 				ret = parse_ini(globbuf.gl_pathv[gindex], _parse_directive, data);
 				if(ret) {
@@ -2638,12 +2639,12 @@ static int _parse_directive(const char *file, int linenum, const char *name,
 {
 	struct section_t *section = data;
 	if(!name && !key && !value) {
-		pm_printf(ALPM_LOG_ERROR, _("config file %s could not be read: %s\n"),
+		pm_printf(PM_LOG_ERROR, _("config file %s could not be read: %s\n"),
 				file, strerror(errno));
 		return 1;
 	} else if(!key && !value) {
 		section->name = name;
-		pm_printf(ALPM_LOG_DEBUG, "config: new section '%s'\n", name);
+		pm_printf(PM_LOG_DEBUG, "config: new section '%s'\n", name);
 		if(strcmp(name, "options") == 0) {
 			section->repo = NULL;
 		} else {
@@ -2661,7 +2662,7 @@ static int _parse_directive(const char *file, int linenum, const char *name,
 	}
 
 	if(section->name == NULL) {
-		pm_printf(ALPM_LOG_ERROR, _("config file %s, line %d: All directives must belong to a section.\n"),
+		pm_printf(PM_LOG_ERROR, _("config file %s, line %d: All directives must belong to a section.\n"),
 				file, linenum);
 		return 1;
 	}
@@ -2731,7 +2732,7 @@ int setdefaults(config_t *c)
 int parseconfigfile(const char *file)
 {
 	struct section_t section = {0};
-	pm_printf(ALPM_LOG_DEBUG, "config: attempting to read file %s\n", file);
+	pm_printf(PM_LOG_DEBUG, "config: attempting to read file %s\n", file);
 	return parse_ini(file, _parse_directive, &section);
 }
 
@@ -2748,7 +2749,7 @@ int parseconfig(const char *file)
 	if((ret = setdefaults(config))) {
 		return ret;
 	}
-	pm_printf(ALPM_LOG_DEBUG, "config: finished parsing %s\n", file);
+	pm_printf(PM_LOG_DEBUG, "config: finished parsing %s\n", file);
 	if((ret = setup_libalpm())) {
 		return ret;
 	}
@@ -2814,6 +2815,7 @@ static char titles[_T_MAX][TITLE_MAXLEN * sizeof(wchar_t)];
  * that they align with the longest title. Storage for strings is stack
  * allocated and naively truncated to TITLE_MAXLEN characters.
  */
+ /*
 static void make_aligned_titles(void)
 {
 	unsigned int i;
@@ -2871,16 +2873,17 @@ static void make_aligned_titles(void)
 		wcstombs(titles[i], wbuf[i], sizeof(wbuf[i]));
 	}
 }
+*/
 
 /** Turn a depends list into a text list.
- * @param deps a list with items of type alpm_depend_t
+ * @param deps a list with items of type pmdepend_t
  */
 static void deplist_display(const char *title,
 		alpm_list_t *deps, unsigned short cols)
 {
 	alpm_list_t *i, *text = NULL;
 	for(i = deps; i; i = alpm_list_next(i)) {
-		alpm_depend_t *dep = i->data;
+		pmdepend_t *dep = i->data;
 		text = alpm_list_add(text, alpm_dep_compute_string(dep));
 	}
 	list_display(title, text, cols);
@@ -2888,14 +2891,14 @@ static void deplist_display(const char *title,
 }
 
 /** Turn a optdepends list into a text list.
- * @param optdeps a list with items of type alpm_depend_t
+ * @param optdeps a list with items of type pmdepend_t
  */
-static void optdeplist_display(alpm_pkg_t *pkg, unsigned short cols)
+static void optdeplist_display(pmpkg_t *pkg, unsigned short cols)
 {
 	alpm_list_t *i, *text = NULL;
-	alpm_db_t *localdb = alpm_get_localdb(config->handle);
+	pmdb_t *localdb = alpm_get_localdb(config->handle);
 	for(i = alpm_pkg_get_optdepends(pkg); i; i = alpm_list_next(i)) {
-		alpm_depend_t *optdep = i->data;
+		pmdepend_t *optdep = i->data;
 		char *depstring = alpm_dep_compute_string(optdep);
 		if(alpm_pkg_get_origin(pkg) == ALPM_PKG_FROM_LOCALDB) {
 			if(alpm_find_satisfier(alpm_db_get_pkgcache(localdb), depstring)) {
@@ -2917,7 +2920,7 @@ static void optdeplist_display(alpm_pkg_t *pkg, unsigned short cols)
  * @param pkg package to display information for
  * @param extra should we show extra information
  */
-void dump_pkg_full(alpm_pkg_t *pkg, int extra)
+void dump_pkg_full(pmpkg_t *pkg, int extra)
 {
 	unsigned short cols;
 	time_t bdate, idate;
@@ -3061,7 +3064,7 @@ void dump_pkg_full(alpm_pkg_t *pkg, int extra)
 	}
 
 	if(from == ALPM_PKG_FROM_FILE) {
-		alpm_siglist_t siglist;
+		alpm_list_t siglist;
 		int err = alpm_pkg_check_pgp_signature(pkg, &siglist);
 		if(err && alpm_errno(config->handle) == ALPM_ERR_SIG_MISSING) {
 			string_display(titles[T_SIGNATURES], _("None"), cols);
@@ -3100,7 +3103,7 @@ static const char *get_backup_file_status(const char *root,
 		char *md5sum = alpm_compute_md5sum(path);
 
 		if(md5sum == NULL) {
-			pm_printf(ALPM_LOG_ERROR,
+			pm_printf(PM_LOG_ERROR,
 					_("could not calculate checksums for %s\n"), path);
 			return NULL;
 		}
@@ -3129,7 +3132,7 @@ static const char *get_backup_file_status(const char *root,
 
 /* Display list of backup files and their modification states
  */
-void dump_pkg_backups(alpm_pkg_t *pkg, unsigned short cols)
+void dump_pkg_backups(pmpkg_t *pkg, unsigned short cols)
 {
 	alpm_list_t *i, *text = NULL;
 	const char *root = alpm_option_get_root(config->handle);
@@ -3160,7 +3163,7 @@ cleanup:
 
 /* List all files contained in a package
  */
-void dump_pkg_files(alpm_pkg_t *pkg, int quiet)
+void dump_pkg_files(pmpkg_t *pkg, int quiet)
 {
 	const char *pkgname, *root;
 	alpm_filelist_t *pkgfiles;
@@ -3186,12 +3189,12 @@ void dump_pkg_files(alpm_pkg_t *pkg, int quiet)
 
 /* Display the changelog of a package
  */
-void dump_pkg_changelog(alpm_pkg_t *pkg)
+void dump_pkg_changelog(pmpkg_t *pkg)
 {
 	void *fp = NULL;
 
 	if((fp = alpm_pkg_changelog_open(pkg)) == NULL) {
-		pm_printf(ALPM_LOG_ERROR, _("no changelog available for '%s'.\n"),
+		pm_printf(PM_LOG_ERROR, _("no changelog available for '%s'.\n"),
 				alpm_pkg_get_name(pkg));
 		return;
 	} else {
@@ -3207,11 +3210,11 @@ void dump_pkg_changelog(alpm_pkg_t *pkg)
 	}
 }
 
-void print_installed(alpm_db_t *db_local, alpm_pkg_t *pkg)
+void print_installed(pmdb_t *db_local, pmpkg_t *pkg)
 {
 	const char *pkgname = alpm_pkg_get_name(pkg);
 	const char *pkgver = alpm_pkg_get_version(pkg);
-	alpm_pkg_t *lpkg = alpm_db_get_pkg(db_local, pkgname);
+	pmpkg_t *lpkg = alpm_db_get_pkg(db_local, pkgname);
 	if(lpkg) {
 		const char *lpkgver = alpm_pkg_get_version(lpkg);
 		const colstr_t *colstr = &config->colstr;
@@ -3224,7 +3227,7 @@ void print_installed(alpm_db_t *db_local, alpm_pkg_t *pkg)
 	}
 }
 
-void print_groups(alpm_pkg_t *pkg)
+void print_groups(pmpkg_t *pkg)
 {
 	alpm_list_t *grp;
 	if((grp = alpm_pkg_get_groups(pkg)) != NULL) {
@@ -3250,10 +3253,10 @@ void print_groups(alpm_pkg_t *pkg)
  * @param show_status show if the package is also in the local db
  * @return -1 on error, 0 if there were matches, 1 if there were not
  */
-int dump_pkg_search(alpm_db_t *db, alpm_list_t *targets, int show_status)
+int dump_pkg_search(pmdb_t *db, alpm_list_t *targets, int show_status)
 {
 	int freelist = 0;
-	alpm_db_t *db_local;
+	pmdb_t *db_local;
 	alpm_list_t *i, *searchlist = NULL;
 	unsigned short cols;
 	const colstr_t *colstr = &config->colstr;
@@ -3278,7 +3281,7 @@ int dump_pkg_search(alpm_db_t *db, alpm_list_t *targets, int show_status)
 
 	cols = getcols();
 	for(i = searchlist; i; i = alpm_list_next(i)) {
-		alpm_pkg_t *pkg = i->data;
+		pmpkg_t *pkg = i->data;
 
 		if(config->quiet) {
 			fputs(alpm_pkg_get_name(pkg), stdout);
@@ -3385,7 +3388,7 @@ static void usage(int op, const char * const myname)
 		printf(_("\nuse '%s {-h --help}' with an operation for available options\n"),
 				myname);
 	} else {
-		if(op == PM_OP_REMOVE) {
+		if(op == PM_ERR_DB_REMOVE) {
 			printf("%s:  %s {-R --remove} [%s] <%s>\n", str_usg, myname, str_opt, str_pkg);
 			printf("%s:\n", str_opt);
 			addlist(_("  -c, --cascade        remove packages and all packages that depend on them\n"));
@@ -3416,7 +3419,7 @@ static void usage(int op, const char * const myname)
 			addlist(_("  -t, --unrequired     list packages not (optionally) required by any\n"
 			          "                       package (-tt to ignore optdepends) [filter]\n"));
 			addlist(_("  -u, --upgrades       list outdated packages [filter]\n"));
-		} else if(op == PM_OP_SYNC) {
+		} else if(op == O_SYNC) {
 			printf("%s:  %s {-S --sync} [%s] [%s]\n", str_usg, myname, str_opt, str_pkg);
 			printf("%s:\n", str_opt);
 			addlist(_("  -c, --clean          remove old packages from cache directory (-cc for all)\n"));
@@ -3452,7 +3455,7 @@ static void usage(int op, const char * const myname)
 			          "                       produce machine-readable output\n"));
 		}
 		switch(op) {
-			case PM_OP_SYNC:
+			case O_SYNC:
 			case PM_OP_UPGRADE:
 				addlist(_("  -w, --downloadonly   download packages but do not install/upgrade anything\n"));
 				addlist(_("      --overwrite <glob>\n"
@@ -3463,7 +3466,7 @@ static void usage(int op, const char * const myname)
 				addlist(_("      --ignoregroup <grp>\n"
 				          "                       ignore a group upgrade (can be used more than once)\n"));
 				__attribute__((fallthrough));
-			case PM_OP_REMOVE:
+			case PM_ERR_DB_REMOVE:
 				addlist(_("  -d, --nodeps         skip dependency version checks (-dd to skip all checks)\n"));
 				addlist(_("      --assume-installed <package=version>\n"
 				          "                       add a virtual package to satisfy dependencies\n"));
@@ -3543,7 +3546,7 @@ static void setuseragent(void)
 	len = snprintf(agent, 100, "pacman/%s (%s %s) libalpm/%s",
 			PACKAGE_VERSION, un.sysname, un.machine, alpm_version());
 	if(len >= 100) {
-		pm_printf(ALPM_LOG_WARNING, _("HTTP_USER_AGENT truncated\n"));
+		pm_printf(PM_LOG_WARNING, _("HTTP_USER_AGENT truncated\n"));
 	}
 
 	setenv("HTTP_USER_AGENT", agent, 0);
@@ -3559,7 +3562,7 @@ static void cleanup(int ret)
 	if(config) {
 		/* free alpm library resources */
 		if(config->handle && alpm_release(config->handle) == -1) {
-			pm_printf(ALPM_LOG_ERROR, "error releasing alpm library\n");
+			pm_printf(PM_LOG_ERROR, "error releasing alpm library\n");
 		}
 
 		config_free(config);
@@ -3575,7 +3578,7 @@ static void cleanup(int ret)
 static void invalid_opt(int used, const char *opt1, const char *opt2)
 {
 	if(used) {
-		pm_printf(ALPM_LOG_ERROR,
+		pm_printf(PM_LOG_ERROR,
 				_("invalid option: '%s' and '%s' may not be used together\n"),
 				opt1, opt2);
 		cleanup(1);
@@ -3613,10 +3616,10 @@ static int parsearg_op(int opt, int dryrun)
 			config->op = (config->op != PM_OP_MAIN ? 0 : PM_OP_QUERY); break;
 		case 'R':
 			if(dryrun) break;
-			config->op = (config->op != PM_OP_MAIN ? 0 : PM_OP_REMOVE); break;
+			config->op = (config->op != PM_OP_MAIN ? 0 : PM_ERR_DB_REMOVE); break;
 		case 'S':
 			if(dryrun) break;
-			config->op = (config->op != PM_OP_MAIN ? 0 : PM_OP_SYNC); break;
+			config->op = (config->op != PM_OP_MAIN ? 0 : O_SYNC); break;
 		case 'T':
 			if(dryrun) break;
 			config->op = (config->op != PM_OP_MAIN ? 0 : PM_OP_DEPTEST); break;
@@ -3660,7 +3663,7 @@ static int parsearg_global(int opt)
 			} else if(strcmp("always", optarg) == 0) {
 				config->color = PM_COLOR_ON;
 			} else {
-				pm_printf(ALPM_LOG_ERROR, _("invalid argument '%s' for %s\n"),
+				pm_printf(PM_LOG_ERROR, _("invalid argument '%s' for %s\n"),
 						optarg, "--color");
 				return 1;
 			}
@@ -3678,18 +3681,18 @@ static int parsearg_global(int opt)
 				unsigned short debug = (unsigned short)atoi(optarg);
 				switch(debug) {
 					case 2:
-						config->logmask |= ALPM_LOG_FUNCTION;
+						config->logmask |= PM_LOG_FUNCTION;
 						__attribute__((fallthrough));
 					case 1:
-						config->logmask |= ALPM_LOG_DEBUG;
+						config->logmask |= PM_LOG_DEBUG;
 						break;
 					default:
-						pm_printf(ALPM_LOG_ERROR, _("'%s' is not a valid debug level\n"),
+						pm_printf(PM_LOG_ERROR, _("'%s' is not a valid debug level\n"),
 								optarg);
 						return 1;
 				}
 			} else {
-				config->logmask |= ALPM_LOG_DEBUG;
+				config->logmask |= PM_LOG_DEBUG;
 			}
 			/* progress bars get wonky with debug on, shut them off */
 			config->noprogressbar = 1;
@@ -4229,7 +4232,7 @@ static int parseargs(int argc, char *argv[])
 	}
 
 	if(config->op == 0) {
-		pm_printf(ALPM_LOG_ERROR, _("only one operation may be used at a time\n"));
+		pm_printf(PM_LOG_ERROR, _("only one operation may be used at a time\n"));
 		return 1;
 	}
 	if(config->help) {
@@ -4261,10 +4264,10 @@ static int parseargs(int argc, char *argv[])
 			case PM_OP_QUERY:
 				result = parsearg_query(opt);
 				break;
-			case PM_OP_REMOVE:
+			case PM_ERR_DB_REMOVE:
 				result = parsearg_remove(opt);
 				break;
-			case PM_OP_SYNC:
+			case O_SYNC:
 				result = parsearg_sync(opt);
 				break;
 			case PM_OP_UPGRADE:
@@ -4287,9 +4290,9 @@ static int parseargs(int argc, char *argv[])
 		if(result != 0) {
 			/* global option parsing failed, abort */
 			if(opt < OP_LONG_FLAG_MIN) {
-				pm_printf(ALPM_LOG_ERROR, _("invalid option '-%c'\n"), opt);
+				pm_printf(PM_LOG_ERROR, _("invalid option '-%c'\n"), opt);
 			} else {
-				pm_printf(ALPM_LOG_ERROR, _("invalid option '--%s'\n"),
+				pm_printf(PM_LOG_ERROR, _("invalid option '--%s'\n"),
 						opts[option_index].name);
 			}
 			return result;
@@ -4309,13 +4312,13 @@ static int parseargs(int argc, char *argv[])
 		case PM_OP_DEPTEST:
 			/* no conflicting options */
 			break;
-		case PM_OP_SYNC:
+		case O_SYNC:
 			checkargs_sync();
 			break;
 		case PM_OP_QUERY:
 			checkargs_query();
 			break;
-		case PM_OP_REMOVE:
+		case PM_ERR_DB_REMOVE:
 			checkargs_remove();
 			break;
 		case PM_OP_UPGRADE:
@@ -4339,7 +4342,7 @@ static void cl_to_log(int argc, char *argv[])
 {
 	char *cl_text = arg_to_string(argc, argv);
 	if(cl_text) {
-		alpm_logaction(config->handle, PACMAN_CALLER_PREFIX,
+		PM_LOGaction(config->handle, PACMAN_CALLER_PREFIX,
 				"Running '%s'\n", cl_text);
 		free(cl_text);
 	}
@@ -4399,7 +4402,7 @@ int main(int argc, char *argv[])
 
 	/* check if we have sufficient permission for the requested operation */
 	if(myuid > 0 && needs_root()) {
-		pm_printf(ALPM_LOG_ERROR, _("you cannot perform this operation unless you are root.\n"));
+		pm_printf(PM_LOG_ERROR, _("you cannot perform this operation unless you are root.\n"));
 		cleanup(EXIT_FAILURE);
 	}
 
@@ -4432,34 +4435,34 @@ int main(int argc, char *argv[])
 			free(line);
 
 			if(ferror(stdin)) {
-				pm_printf(ALPM_LOG_ERROR,
+				pm_printf(PM_LOG_ERROR,
 						_("failed to read arguments from stdin: (%s)\n"), strerror(errno));
 				cleanup(EXIT_FAILURE);
 			}
 
 			if(!freopen(ctermid(NULL), "r", stdin)) {
-				pm_printf(ALPM_LOG_ERROR, _("failed to reopen stdin for reading: (%s)\n"),
+				pm_printf(PM_LOG_ERROR, _("failed to reopen stdin for reading: (%s)\n"),
 						strerror(errno));
 			}
 
 			if(!target_found) {
-				pm_printf(ALPM_LOG_ERROR, _("argument '-' specified with empty stdin\n"));
+				pm_printf(PM_LOG_ERROR, _("argument '-' specified with empty stdin\n"));
 				cleanup(1);
 			}
 		} else {
 			/* do not read stdin from terminal */
-			pm_printf(ALPM_LOG_ERROR, _("argument '-' specified without input on stdin\n"));
+			pm_printf(PM_LOG_ERROR, _("argument '-' specified without input on stdin\n"));
 			cleanup(1);
 		}
 	}
 
 	if(config->sysroot && (chroot(config->sysroot) != 0 || chdir("/") != 0)) {
-		pm_printf(ALPM_LOG_ERROR,
+		pm_printf(PM_LOG_ERROR,
 				_("chroot to '%s' failed: (%s)\n"), config->sysroot, strerror(errno));
 		cleanup(EXIT_FAILURE);
 	}
 
-	pm_printf(ALPM_LOG_DEBUG, "pacman v%s - libalpm v%s\n", PACKAGE_VERSION, alpm_version());
+	pm_printf(PM_LOG_DEBUG, "pacman v%s - libalpm v%s\n", PACKAGE_VERSION, alpm_version());
 
 	/* parse the config file */
 	ret = parseconfig(config->configfile);
@@ -4478,7 +4481,7 @@ int main(int argc, char *argv[])
 		config->flags |= ALPM_TRANS_FLAG_NOCONFLICTS;
 		config->flags |= ALPM_TRANS_FLAG_NOLOCK;
 		/* Display only errors */
-		config->logmask &= ~ALPM_LOG_WARNING;
+		config->logmask &= ~PM_LOG_WARNING;
 	}
 
 	if(config->verbose > 0) {
@@ -4512,7 +4515,7 @@ int main(int argc, char *argv[])
 		case PM_OP_DATABASE:
 			ret = pacman_database(pm_targets);
 			break;
-		case PM_OP_REMOVE:
+		case PM_ERR_DB_REMOVE:
 			ret = pacman_remove(pm_targets);
 			break;
 		case PM_OP_UPGRADE:
@@ -4521,7 +4524,7 @@ int main(int argc, char *argv[])
 		case PM_OP_QUERY:
 			ret = pacman_query(pm_targets);
 			break;
-		case PM_OP_SYNC:
+		case O_SYNC:
 			ret = pacman_sync(pm_targets);
 			break;
 		case PM_OP_DEPTEST:
@@ -4531,7 +4534,7 @@ int main(int argc, char *argv[])
 			ret = pacman_files(pm_targets);
 			break;
 		default:
-			pm_printf(ALPM_LOG_ERROR, _("no operation specified (use -h for help)\n"));
+			pm_printf(PM_LOG_ERROR, _("no operation specified (use -h for help)\n"));
 			ret = EXIT_FAILURE;
 	}
 
@@ -4589,7 +4592,7 @@ static int search_path(char **filename, struct stat *bufptr)
 	return -1;
 }
 
-static void print_query_fileowner(const char *filename, alpm_pkg_t *info)
+static void print_query_fileowner(const char *filename, pmpkg_t *info)
 {
 	if(!config->quiet) {
 		const colstr_t *colstr = &config->colstr;
@@ -4650,12 +4653,12 @@ static int query_fileowner(alpm_list_t *targets)
 	const char *root = alpm_option_get_root(config->handle);
 	size_t rootlen = strlen(root);
 	alpm_list_t *t;
-	alpm_db_t *db_local;
+	pmdb_t *db_local;
 	alpm_list_t *packages;
 
 	/* This code is here for safety only */
 	if(targets == NULL) {
-		pm_printf(ALPM_LOG_ERROR, _("no file was specified for --owns\n"));
+		pm_printf(PM_LOG_ERROR, _("no file was specified for --owns\n"));
 		return 1;
 	}
 
@@ -4676,7 +4679,7 @@ static int query_fileowner(alpm_list_t *targets)
 		}
 
 		if(strcmp(filename, "") == 0) {
-			pm_printf(ALPM_LOG_ERROR, _("empty string passed to file owner query\n"));
+			pm_printf(PM_LOG_ERROR, _("empty string passed to file owner query\n"));
 			goto targcleanup;
 		}
 
@@ -4703,7 +4706,7 @@ static int query_fileowner(alpm_list_t *targets)
 
 		if(strncmp(rpath, root, rootlen) != 0) {
 			/* file is outside root, we know nothing can own it */
-			pm_printf(ALPM_LOG_ERROR, _("No package owns %s\n"), filename);
+			pm_printf(PM_LOG_ERROR, _("No package owns %s\n"), filename);
 			goto targcleanup;
 		}
 
@@ -4712,7 +4715,7 @@ static int query_fileowner(alpm_list_t *targets)
 		if((is_missing && is_dir) || (!is_missing && (is_dir = S_ISDIR(buf.st_mode)))) {
 			size_t rlen = strlen(rpath);
 			if(rlen + 2 >= PATH_MAX) {
-					pm_printf(ALPM_LOG_ERROR, _("path too long: %s/\n"), rpath);
+					pm_printf(PM_LOG_ERROR, _("path too long: %s/\n"), rpath);
 					goto targcleanup;
 			}
 			strcat(rpath + rlen, "/");
@@ -4725,7 +4728,7 @@ static int query_fileowner(alpm_list_t *targets)
 			}
 		}
 		if(!found) {
-			pm_printf(ALPM_LOG_ERROR, _("No package owns %s\n"), filename);
+			pm_printf(PM_LOG_ERROR, _("No package owns %s\n"), filename);
 		}
 
 targcleanup:
@@ -4741,11 +4744,11 @@ targcleanup:
 /* search the local database for a matching package */
 static int query_search(alpm_list_t *targets)
 {
-	alpm_db_t *db_local = alpm_get_localdb(config->handle);
+	pmdb_t *db_local = alpm_get_localdb(config->handle);
 	int ret = dump_pkg_search(db_local, targets, 0);
 	if(ret == -1) {
 		alpm_errno_t err = alpm_errno(config->handle);
-		pm_printf(ALPM_LOG_ERROR, "search failed: %s\n", alpm_strerror(err));
+		pm_printf(PM_LOG_ERROR, "search failed: %s\n", alpm_strerror(err));
 		return 1;
 	}
 
@@ -4753,7 +4756,7 @@ static int query_search(alpm_list_t *targets)
 
 }
 
-static unsigned short pkg_get_locality(alpm_pkg_t *pkg)
+static unsigned short pkg_get_locality(pmpkg_t *pkg)
 {
 	const char *pkgname = alpm_pkg_get_name(pkg);
 	alpm_list_t *j;
@@ -4767,7 +4770,7 @@ static unsigned short pkg_get_locality(alpm_pkg_t *pkg)
 	return PKG_LOCALITY_FOREIGN;
 }
 
-static int is_unrequired(alpm_pkg_t *pkg, unsigned short level)
+static int is_unrequired(pmpkg_t *pkg, unsigned short level)
 {
 	alpm_list_t *requiredby = alpm_pkg_compute_requiredby(pkg);
 	if(requiredby == NULL) {
@@ -4782,7 +4785,7 @@ static int is_unrequired(alpm_pkg_t *pkg, unsigned short level)
 	return 0;
 }
 
-static int filter(alpm_pkg_t *pkg)
+static int filter(pmpkg_t *pkg)
 {
 	/* check if this package was explicitly installed */
 	if(config->op_q_explicit &&
@@ -4810,7 +4813,7 @@ static int filter(alpm_pkg_t *pkg)
 	return 1;
 }
 
-static int display(alpm_pkg_t *pkg)
+static int display(pmpkg_t *pkg)
 {
 	int ret = 0;
 
@@ -4843,8 +4846,8 @@ static int display(alpm_pkg_t *pkg)
 
 			if(config->op_q_upgrade) {
 				int usage;
-				alpm_pkg_t *newpkg = alpm_sync_get_new_version(pkg, alpm_get_syncdbs(config->handle));
-				alpm_db_t *db = alpm_pkg_get_db(newpkg);
+				pmpkg_t *newpkg = alpm_sync_get_new_version(pkg, alpm_get_syncdbs(config->handle));
+				pmdb_t *db = alpm_pkg_get_db(newpkg);
 				alpm_db_get_usage(db, &usage);
 				
 				printf(" -> %s%s%s", colstr->version, alpm_pkg_get_version(newpkg), colstr->nocolor);
@@ -4867,7 +4870,7 @@ static int query_group(alpm_list_t *targets)
 	alpm_list_t *i, *j;
 	const char *grpname = NULL;
 	int ret = 0;
-	alpm_db_t *db_local = alpm_get_localdb(config->handle);
+	pmdb_t *db_local = alpm_get_localdb(config->handle);
 
 	if(targets == NULL) {
 		for(j = alpm_db_get_groupcache(db_local); j; j = alpm_list_next(j)) {
@@ -4875,7 +4878,7 @@ static int query_group(alpm_list_t *targets)
 			const alpm_list_t *p;
 
 			for(p = grp->packages; p; p = alpm_list_next(p)) {
-				alpm_pkg_t *pkg = p->data;
+				pmpkg_t *pkg = p->data;
 				if(!filter(pkg)) {
 					continue;
 				}
@@ -4901,7 +4904,7 @@ static int query_group(alpm_list_t *targets)
 					}
 				}
 			} else {
-				pm_printf(ALPM_LOG_ERROR, _("group '%s' was not found\n"), grpname);
+				pm_printf(PM_LOG_ERROR, _("group '%s' was not found\n"), grpname);
 				ret++;
 			}
 		}
@@ -4914,8 +4917,8 @@ int pacman_query(alpm_list_t *targets)
 	int ret = 0;
 	int match = 0;
 	alpm_list_t *i;
-	alpm_pkg_t *pkg = NULL;
-	alpm_db_t *db_local;
+	pmpkg_t *pkg = NULL;
+	pmdb_t *db_local;
 
 	/* First: operations that do not require targets */
 
@@ -4944,7 +4947,7 @@ int pacman_query(alpm_list_t *targets)
 	 * invalid: isfile, owns */
 	if(targets == NULL) {
 		if(config->op_q_isfile || config->op_q_owns) {
-			pm_printf(ALPM_LOG_ERROR, _("no targets specified (use -h for help)\n"));
+			pm_printf(PM_LOG_ERROR, _("no targets specified (use -h for help)\n"));
 			return 1;
 		}
 
@@ -4986,7 +4989,7 @@ int pacman_query(alpm_list_t *targets)
 			alpm_pkg_load(config->handle, strname, 1, 0, &pkg);
 
 			if(pkg == NULL) {
-				pm_printf(ALPM_LOG_ERROR,
+				pm_printf(PM_LOG_ERROR,
 						_("could not load package '%s': %s\n"), strname,
 						alpm_strerror(alpm_errno(config->handle)));
 			}
@@ -4997,10 +5000,10 @@ int pacman_query(alpm_list_t *targets)
 			}
 
 			if(pkg == NULL) {
-				pm_printf(ALPM_LOG_ERROR,
+				pm_printf(PM_LOG_ERROR,
 						_("package '%s' was not found\n"), strname);
 				if(!config->op_q_isfile && access(strname, R_OK) == 0) {
-					pm_printf(ALPM_LOG_WARNING,
+					pm_printf(PM_LOG_WARNING,
 							_("'%s' is a file, you might want to use %s.\n"),
 							strname, "-p/--file");
 				}
@@ -5045,7 +5048,7 @@ static int unlink_verbose(const char *pathname, int ignore_missing)
 		if(ignore_missing && errno == ENOENT) {
 			ret = 0;
 		} else {
-			pm_printf(ALPM_LOG_ERROR, _("could not remove %s: %s\n"),
+			pm_printf(PM_LOG_ERROR, _("could not remove %s: %s\n"),
 					pathname, strerror(errno));
 		}
 	}
@@ -5061,7 +5064,7 @@ static int sync_cleandb(const char *dbpath)
 
 	dir = opendir(dbpath);
 	if(dir == NULL) {
-		pm_printf(ALPM_LOG_ERROR, _("could not access database directory\n"));
+		pm_printf(PM_LOG_ERROR, _("could not access database directory\n"));
 		return 1;
 	}
 
@@ -5087,12 +5090,12 @@ static int sync_cleandb(const char *dbpath)
 
 		/* remove all non-skipped directories and non-database files */
 		if(stat(path, &buf) == -1) {
-			pm_printf(ALPM_LOG_ERROR, _("could not remove %s: %s\n"),
+			pm_printf(PM_LOG_ERROR, _("could not remove %s: %s\n"),
 					path, strerror(errno));
 		}
 		if(S_ISDIR(buf.st_mode)) {
 			if(rmrf(path)) {
-				pm_printf(ALPM_LOG_ERROR, _("could not remove %s: %s\n"),
+				pm_printf(PM_LOG_ERROR, _("could not remove %s: %s\n"),
 						path, strerror(errno));
 			}
 			continue;
@@ -5113,7 +5116,7 @@ static int sync_cleandb(const char *dbpath)
 		}
 
 		for(i = syncdbs; i && !found; i = alpm_list_next(i)) {
-			alpm_db_t *db = i->data;
+			pmdb_t *db = i->data;
 			found = !strcmp(dbname, alpm_db_get_name(db));
 		}
 
@@ -5155,7 +5158,7 @@ static int sync_cleancache(int level)
 {
 	alpm_list_t *i;
 	alpm_list_t *sync_dbs = alpm_get_syncdbs(config->handle);
-	alpm_db_t *db_local = alpm_get_localdb(config->handle);
+	pmdb_t *db_local = alpm_get_localdb(config->handle);
 	alpm_list_t *cachedirs = alpm_option_get_cachedirs(config->handle);
 	int ret = 0;
 
@@ -5198,7 +5201,7 @@ static int sync_cleancache(int level)
 
 		dir = opendir(cachedir);
 		if(dir == NULL) {
-			pm_printf(ALPM_LOG_ERROR,
+			pm_printf(PM_LOG_ERROR,
 					_("could not access cache directory %s\n"), cachedir);
 			ret++;
 			continue;
@@ -5209,7 +5212,7 @@ static int sync_cleancache(int level)
 		while((ent = readdir(dir)) != NULL) {
 			char path[PATH_MAX];
 			int delete = 1;
-			alpm_pkg_t *localpkg = NULL, *pkg = NULL;
+			pmpkg_t *localpkg = NULL, *pkg = NULL;
 			const char *local_name, *local_version;
 
 			if(strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
@@ -5251,7 +5254,7 @@ static int sync_cleancache(int level)
 			 * simply skip it and move on. we don't need a full load of the package,
 			 * just the metadata. */
 			if(alpm_pkg_load(config->handle, path, 0, 0, &localpkg) != 0) {
-				pm_printf(ALPM_LOG_DEBUG, "skipping %s, could not load as package\n",
+				pm_printf(PM_LOG_DEBUG, "skipping %s, could not load as package\n",
 						path);
 				continue;
 			}
@@ -5264,7 +5267,7 @@ static int sync_cleancache(int level)
 				if(pkg != NULL && alpm_pkg_vercmp(local_version,
 							alpm_pkg_get_version(pkg)) == 0) {
 					/* package was found in local DB and version matches, keep it */
-					pm_printf(ALPM_LOG_DEBUG, "package %s-%s found in local db\n",
+					pm_printf(PM_LOG_DEBUG, "package %s-%s found in local db\n",
 							local_name, local_version);
 					delete = 0;
 				}
@@ -5273,12 +5276,12 @@ static int sync_cleancache(int level)
 				alpm_list_t *j;
 				/* check if this package is in a sync DB */
 				for(j = sync_dbs; j && delete; j = alpm_list_next(j)) {
-					alpm_db_t *db = j->data;
+					pmdb_t *db = j->data;
 					pkg = alpm_db_get_pkg(db, local_name);
 					if(pkg != NULL && alpm_pkg_vercmp(local_version,
 								alpm_pkg_get_version(pkg)) == 0) {
 						/* package was found in a sync DB and version matches, keep it */
-						pm_printf(ALPM_LOG_DEBUG, "package %s-%s found in sync db\n",
+						pm_printf(PM_LOG_DEBUG, "package %s-%s found in sync db\n",
 								local_name, local_version);
 						delete = 0;
 					}
@@ -5311,12 +5314,12 @@ static int sync_search(alpm_list_t *syncs, alpm_list_t *targets)
 	int found = 0;
 
 	for(i = syncs; i; i = alpm_list_next(i)) {
-		alpm_db_t *db = i->data;
+		pmdb_t *db = i->data;
 		int ret = dump_pkg_search(db, targets, 1);
 
 		if(ret == -1) {
 			alpm_errno_t err = alpm_errno(config->handle);
-			pm_printf(ALPM_LOG_ERROR, "search failed: %s\n", alpm_strerror(err));
+			pm_printf(PM_LOG_ERROR, "search failed: %s\n", alpm_strerror(err));
 			return 1;
 		}
 
@@ -5337,7 +5340,7 @@ static int sync_group(int level, alpm_list_t *syncs, alpm_list_t *targets)
 			found = 0;
 			const char *grpname = i->data;
 			for(j = syncs; j; j = alpm_list_next(j)) {
-				alpm_db_t *db = j->data;
+				pmdb_t *db = j->data;
 				alpm_group_t *grp = alpm_db_get_group(db, grpname);
 
 				if(grp) {
@@ -5360,7 +5363,7 @@ static int sync_group(int level, alpm_list_t *syncs, alpm_list_t *targets)
 	} else {
 		ret = 1;
 		for(i = syncs; i; i = alpm_list_next(i)) {
-			alpm_db_t *db = i->data;
+			pmdb_t *db = i->data;
 
 			for(j = alpm_db_get_groupcache(db); j; j = alpm_list_next(j)) {
 				alpm_group_t *grp = j->data;
@@ -5409,14 +5412,14 @@ static int sync_info(alpm_list_t *syncs, alpm_list_t *targets)
 			}
 
 			for(j = syncs; j; j = alpm_list_next(j)) {
-				alpm_db_t *db = j->data;
+				pmdb_t *db = j->data;
 				if(repo && strcmp(repo, alpm_db_get_name(db)) != 0) {
 					continue;
 				}
 				founddb = 1;
 
 				for(k = alpm_db_get_pkgcache(db); k; k = alpm_list_next(k)) {
-					alpm_pkg_t *pkg = k->data;
+					pmpkg_t *pkg = k->data;
 
 					if(strcmp(alpm_pkg_get_name(pkg), pkgstr) == 0) {
 						dump_pkg_full(pkg, config->op_s_info > 1);
@@ -5427,12 +5430,12 @@ static int sync_info(alpm_list_t *syncs, alpm_list_t *targets)
 			}
 
 			if(!founddb) {
-				pm_printf(ALPM_LOG_ERROR,
+				pm_printf(PM_LOG_ERROR,
 						_("repository '%s' does not exist\n"), repo);
 				ret++;
 			}
 			if(!foundpkg) {
-				pm_printf(ALPM_LOG_ERROR,
+				pm_printf(PM_LOG_ERROR,
 						_("package '%s' was not found\n"), target);
 				ret++;
 			}
@@ -5440,10 +5443,10 @@ static int sync_info(alpm_list_t *syncs, alpm_list_t *targets)
 		}
 	} else {
 		for(i = syncs; i; i = alpm_list_next(i)) {
-			alpm_db_t *db = i->data;
+			pmdb_t *db = i->data;
 
 			for(j = alpm_db_get_pkgcache(db); j; j = alpm_list_next(j)) {
-				alpm_pkg_t *pkg = j->data;
+				pmpkg_t *pkg = j->data;
 				dump_pkg_full(pkg, config->op_s_info > 1);
 			}
 		}
@@ -5455,16 +5458,16 @@ static int sync_info(alpm_list_t *syncs, alpm_list_t *targets)
 static int sync_list(alpm_list_t *syncs, alpm_list_t *targets)
 {
 	alpm_list_t *i, *j, *ls = NULL;
-	alpm_db_t *db_local = alpm_get_localdb(config->handle);
+	pmdb_t *db_local = alpm_get_localdb(config->handle);
 	int ret = 0;
 
 	if(targets) {
 		for(i = targets; i; i = alpm_list_next(i)) {
 			const char *repo = i->data;
-			alpm_db_t *db = NULL;
+			pmdb_t *db = NULL;
 
 			for(j = syncs; j; j = alpm_list_next(j)) {
-				alpm_db_t *d = j->data;
+				pmdb_t *d = j->data;
 
 				if(strcmp(repo, alpm_db_get_name(d)) == 0) {
 					db = d;
@@ -5473,7 +5476,7 @@ static int sync_list(alpm_list_t *syncs, alpm_list_t *targets)
 			}
 
 			if(db == NULL) {
-				pm_printf(ALPM_LOG_ERROR,
+				pm_printf(PM_LOG_ERROR,
 					_("repository \"%s\" was not found.\n"), repo);
 				ret = 1;
 			}
@@ -5485,10 +5488,10 @@ static int sync_list(alpm_list_t *syncs, alpm_list_t *targets)
 	}
 
 	for(i = ls; i; i = alpm_list_next(i)) {
-		alpm_db_t *db = i->data;
+		pmdb_t *db = i->data;
 
 		for(j = alpm_db_get_pkgcache(db); j; j = alpm_list_next(j)) {
-			alpm_pkg_t *pkg = j->data;
+			pmpkg_t *pkg = j->data;
 
 			if(!config->quiet) {
 				const colstr_t *colstr = &config->colstr;
@@ -5510,11 +5513,11 @@ static int sync_list(alpm_list_t *syncs, alpm_list_t *targets)
 	return ret;
 }
 
-static alpm_db_t *get_db(const char *dbname)
+static pmdb_t *get_db(const char *dbname)
 {
 	alpm_list_t *i;
 	for(i = alpm_get_syncdbs(config->handle); i; i = i->next) {
-		alpm_db_t *db = i->data;
+		pmdb_t *db = i->data;
 		if(strcmp(alpm_db_get_name(db), dbname) == 0) {
 			return db;
 		}
@@ -5522,13 +5525,13 @@ static alpm_db_t *get_db(const char *dbname)
 	return NULL;
 }
 
-static int process_pkg(alpm_pkg_t *pkg)
+static int process_pkg(pmpkg_t *pkg)
 {
 	int ret = alpm_add_pkg(config->handle, pkg);
 
 	if(ret == -1) {
 		alpm_errno_t err = alpm_errno(config->handle);
-		pm_printf(ALPM_LOG_ERROR, "'%s': %s\n", alpm_pkg_get_name(pkg), alpm_strerror(err));
+		pm_printf(PM_LOG_ERROR, "'%s': %s\n", alpm_pkg_get_name(pkg), alpm_strerror(err));
 		return 1;
 	}
 	config->explicit_adds = alpm_list_add(config->explicit_adds, pkg);
@@ -5539,7 +5542,7 @@ static int group_exists(alpm_list_t *dbs, const char *name)
 {
 	alpm_list_t *i;
 	for(i = dbs; i; i = i->next) {
-		alpm_db_t *db = i->data;
+		pmdb_t *db = i->data;
 
 		if(alpm_db_get_group(db, name)) {
 			return 1;
@@ -5561,7 +5564,7 @@ static int process_group(alpm_list_t *dbs, const char *group, int error)
 			return 0;
 		}
 
-		pm_printf(ALPM_LOG_ERROR, _("target not found: %s\n"), group);
+		pm_printf(PM_LOG_ERROR, _("target not found: %s\n"), group);
 		return 1;
 	}
 
@@ -5590,7 +5593,7 @@ static int process_group(alpm_list_t *dbs, const char *group, int error)
 			goto cleanup;
 		}
 		for(i = pkgs, n = 0; i; i = alpm_list_next(i)) {
-			alpm_pkg_t *pkg = i->data;
+			pmpkg_t *pkg = i->data;
 
 			if(array[n++] == 0) {
 				continue;
@@ -5605,7 +5608,7 @@ static int process_group(alpm_list_t *dbs, const char *group, int error)
 		free(array);
 	} else {
 		for(i = pkgs; i; i = alpm_list_next(i)) {
-			alpm_pkg_t *pkg = i->data;
+			pmpkg_t *pkg = i->data;
 
 			if(process_pkg(pkg) == 1) {
 				ret = 1;
@@ -5622,11 +5625,11 @@ cleanup:
 static int process_targname(alpm_list_t *dblist, const char *targname,
 		int error)
 {
-	alpm_pkg_t *pkg = alpm_find_dbs_satisfier(config->handle, dblist, targname);
+	pmpkg_t *pkg = alpm_find_dbs_satisfier(config->handle, dblist, targname);
 
 	/* skip ignored packages when user says no */
 	if(alpm_errno(config->handle) == ALPM_ERR_PKG_IGNORED) {
-			pm_printf(ALPM_LOG_WARNING, _("skipping target: %s\n"), targname);
+			pm_printf(PM_LOG_WARNING, _("skipping target: %s\n"), targname);
 			return 0;
 	}
 
@@ -5646,7 +5649,7 @@ static int process_target(const char *target, int error)
 	alpm_list_t *dblist;
 
 	if(targname && targname != targstring) {
-		alpm_db_t *db;
+		pmdb_t *db;
 		const char *dbname;
 		int usage;
 
@@ -5655,7 +5658,7 @@ static int process_target(const char *target, int error)
 		dbname = targstring;
 		db = get_db(dbname);
 		if(!db) {
-			pm_printf(ALPM_LOG_ERROR, _("database not found: %s\n"),
+			pm_printf(PM_LOG_ERROR, _("database not found: %s\n"),
 					dbname);
 			ret = 1;
 			goto cleanup;
@@ -5682,7 +5685,7 @@ static int process_target(const char *target, int error)
 cleanup:
 	free(targstring);
 	if(ret && access(target, R_OK) == 0) {
-		pm_printf(ALPM_LOG_WARNING,
+		pm_printf(PM_LOG_WARNING,
 				_("'%s' is a file, did you mean %s instead of %s?\n"),
 				target, "-U/--upgrade", "-S/--sync");
 	}
@@ -5701,7 +5704,7 @@ static int sync_trans(alpm_list_t *targets)
 
 	/* process targets */
 	for(i = targets; i; i = alpm_list_next(i)) {
-		const char *targ = i->data;
+		const char *optarg = i->data;
 		if(process_target(targ, retval) == 1) {
 			retval = 1;
 		}
@@ -5715,11 +5718,11 @@ static int sync_trans(alpm_list_t *targets)
 	if(config->op_s_upgrade) {
 		if(!config->print) {
 			colon_printf(_("Starting full system upgrade...\n"));
-			alpm_logaction(config->handle, PACMAN_CALLER_PREFIX,
+			PM_LOGaction(config->handle, PACMAN_CALLER_PREFIX,
 					"starting full system upgrade\n");
 		}
 		if(alpm_sync_sysupgrade(config->handle, config->op_s_upgrade >= 2) == -1) {
-			pm_printf(ALPM_LOG_ERROR, "%s\n", alpm_strerror(alpm_errno(config->handle)));
+			pm_printf(PM_LOG_ERROR, "%s\n", alpm_strerror(alpm_errno(config->handle)));
 			trans_release();
 			return 1;
 		}
@@ -5732,7 +5735,7 @@ static void print_broken_dep(alpm_depmissing_t *miss)
 {
 	char *depstring = alpm_dep_compute_string(miss->depend);
 	alpm_list_t *trans_add = alpm_trans_get_add(config->handle);
-	alpm_pkg_t *pkg;
+	pmpkg_t *pkg;
 	if(miss->causingpkg == NULL) {
 		/* package being installed/upgraded has unresolved dependency */
 		colon_printf(_("unable to satisfy dependency '%s' required by %s\n"),
@@ -5757,7 +5760,7 @@ int sync_prepare_execute(void)
 	/* Step 2: "compute" the transaction based on targets and flags */
 	if(alpm_trans_prepare(config->handle, &data) == -1) {
 		alpm_errno_t err = alpm_errno(config->handle);
-		pm_printf(ALPM_LOG_ERROR, _("failed to prepare transaction (%s)\n"),
+		pm_printf(PM_LOG_ERROR, _("failed to prepare transaction (%s)\n"),
 		        alpm_strerror(err));
 		switch(err) {
 			case ALPM_ERR_PKG_INVALID_ARCH:
@@ -5828,7 +5831,7 @@ int sync_prepare_execute(void)
 	multibar_move_completed_up(true);
 	if(alpm_trans_commit(config->handle, &data) == -1) {
 		alpm_errno_t err = alpm_errno(config->handle);
-		pm_printf(ALPM_LOG_ERROR, _("failed to commit transaction (%s)\n"),
+		pm_printf(PM_LOG_ERROR, _("failed to commit transaction (%s)\n"),
 		        alpm_strerror(err));
 		switch(err) {
 			case ALPM_ERR_FILE_CONFLICTS:
@@ -5911,7 +5914,7 @@ int pacman_sync(alpm_list_t *targets)
 	if(config->op_s_sync) {
 		/* grab a fresh package list */
 		colon_printf(_("Synchronizing package databases...\n"));
-		alpm_logaction(config->handle, PACMAN_CALLER_PREFIX,
+		PM_LOGaction(config->handle, PACMAN_CALLER_PREFIX,
 				"synchronizing package lists\n");
 		if(!sync_syncdbs(config->op_s_sync, sync_dbs)) {
 			return 1;
@@ -5950,7 +5953,7 @@ int pacman_sync(alpm_list_t *targets)
 		} else {
 			/* don't proceed here unless we have an operation that doesn't require a
 			 * target list */
-			pm_printf(ALPM_LOG_ERROR, _("no targets specified (use -h for help)\n"));
+			pm_printf(PM_LOG_ERROR, _("no targets specified (use -h for help)\n"));
 			return 1;
 		}
 	}
@@ -5961,15 +5964,15 @@ int pacman_sync(alpm_list_t *targets)
 //testpkg.c
 
 __attribute__((format(printf, 3, 0)))
-static void output_cb(void *ctx, alpm_loglevel_t level, const char *fmt, va_list args)
+static void output_cb(void *ctx, pm_loglevel_t level, const char *fmt, va_list args)
 {
 	(void)ctx;
 	if(fmt[0] == '\0') {
 		return;
 	}
 	switch(level) {
-		case ALPM_LOG_ERROR: printf(_("error: ")); break;
-		case ALPM_LOG_WARNING: printf(_("warning: ")); break;
+		case PM_LOG_ERROR: printf(_("error: ")); break;
+		case PM_LOG_WARNING: printf(_("warning: ")); break;
 		default: return; /* skip other messages */
 	}
 	vprintf(fmt, args);
@@ -5980,7 +5983,7 @@ int main(int argc, char *argv[])
 	int retval = 1; /* default = false */
 	alpm_handle_t *handle;
 	alpm_errno_t err;
-	alpm_pkg_t *pkg = NULL;
+	pmpkg_t *pkg = NULL;
 	const int siglevel = ALPM_SIG_PACKAGE | ALPM_SIG_PACKAGE_OPTIONAL;
 
 #if defined(ENABLE_NLS)
@@ -6010,13 +6013,13 @@ int main(int argc, char *argv[])
 			|| pkg == NULL) {
 		err = alpm_errno(handle);
 		switch(err) {
-			case ALPM_ERR_PKG_NOT_FOUND:
+			case PM_ERR_PKG_NOT_FOUND:
 				printf(_("Cannot find the given file.\n"));
 				break;
-			case ALPM_ERR_PKG_OPEN:
+			case PM_ERR_PKG_OPEN:
 				printf(_("Cannot open the given file.\n"));
 				break;
-			case ALPM_ERR_LIBARCHIVE:
+			case PM_ERR_LIBARCHIVE:
 			case ALPM_ERR_PKG_INVALID:
 				printf(_("Package is invalid.\n"));
 				break;
@@ -6382,11 +6385,11 @@ int trans_init(int flags, int check_valid)
 void trans_init_error(void)
 {
 	alpm_errno_t err = alpm_errno(config->handle);
-	pm_printf(ALPM_LOG_ERROR, _("failed to init transaction (%s)\n"),
+	pm_printf(PM_LOG_ERROR, _("failed to init transaction (%s)\n"),
 			alpm_strerror(err));
-	if(err == ALPM_ERR_HANDLE_LOCK) {
+	if(err == PM_ERR_HANDLE_LOCK) {
 		const char *lockfile = alpm_option_get_lockfile(config->handle);
-		pm_printf(ALPM_LOG_ERROR, _("could not lock database: %s\n"),
+		pm_printf(PM_LOG_ERROR, _("could not lock database: %s\n"),
 					strerror(errno));
 		if(access(lockfile, F_OK) == 0) {
 			fprintf(stderr, _("  if you're sure a package manager is not already\n"
@@ -6398,7 +6401,7 @@ void trans_init_error(void)
 int trans_release(void)
 {
 	if(alpm_trans_release(config->handle) == -1) {
-		pm_printf(ALPM_LOG_ERROR, _("failed to release transaction (%s)\n"),
+		pm_printf(PM_LOG_ERROR, _("failed to release transaction (%s)\n"),
 				alpm_strerror(alpm_errno(config->handle)));
 		return -1;
 	}
@@ -6414,9 +6417,9 @@ int needs_root(void)
 		case PM_OP_DATABASE:
 			return !config->op_q_check;
 		case PM_OP_UPGRADE:
-		case PM_OP_REMOVE:
+		case PM_ERR_DB_REMOVE:
 			return !config->print;
-		case PM_OP_SYNC:
+		case O_SYNC:
 			return (config->op_s_clean || config->op_s_sync ||
 					(!config->group && !config->op_s_info && !config->op_q_list &&
 					 !config->op_s_search && !config->print));
@@ -6434,16 +6437,16 @@ int check_syncdbs(size_t need_repos, int check_valid)
 	alpm_list_t *sync_dbs = alpm_get_syncdbs(config->handle);
 
 	if(need_repos && sync_dbs == NULL) {
-		pm_printf(ALPM_LOG_ERROR, _("no usable package repositories configured.\n"));
+		pm_printf(PM_LOG_ERROR, _("no usable package repositories configured.\n"));
 		return 1;
 	}
 
 	if(check_valid) {
 		/* ensure all known dbs are valid */
 		for(i = sync_dbs; i; i = alpm_list_next(i)) {
-			alpm_db_t *db = i->data;
-			if(alpm_db_get_valid(db)) {
-				pm_printf(ALPM_LOG_ERROR, _("database '%s' is not valid (%s)\n"),
+			pmdb_t *db = i->data;
+			if(alpm_deb_get_url(db)) {
+				pm_printf(PM_LOG_ERROR, _("database '%s' is not valid (%s)\n"),
 						alpm_db_get_name(db), alpm_strerror(alpm_errno(config->handle)));
 				ret = 1;
 			}
@@ -6460,7 +6463,7 @@ int sync_syncdbs(int level, alpm_list_t *syncs)
 	multibar_move_completed_up(false);
 	ret = alpm_db_update(config->handle, syncs, force);
 	if(ret < 0) {
-		pm_printf(ALPM_LOG_ERROR, _("failed to synchronize all databases (%s)\n"),
+		pm_printf(PM_LOG_ERROR, _("failed to synchronize all databases (%s)\n"),
 			alpm_strerror(alpm_errno(config->handle)));
 	}
 
@@ -6786,7 +6789,7 @@ static void add_transaction_sizes_row(alpm_list_t **rows, char *label, off_t siz
 	char *str;
 	const char *units;
 	double s = humanize_size(size, 'M', 2, &units);
-	pm_asprintf(&str, "%.2f %s", s, units);
+	vsprintf(&str, "%.2f %s", s, units);
 
 	add_table_cell(&row, label, CELL_TITLE);
 	add_table_cell(&row, str, CELL_RIGHT_ALIGN | CELL_FREE);
@@ -6951,7 +6954,7 @@ static int table_display(const alpm_list_t *header,
 			&widths, &has_data);
 	/* return -1 if terminal is not wide enough */
 	if(cols && totalwidth > cols) {
-		pm_printf(ALPM_LOG_WARNING,
+		pm_printf(PM_LOG_WARNING,
 				_("insufficient columns available for table display\n"));
 		ret = -1;
 		goto cleanup;
@@ -7046,7 +7049,7 @@ void list_display_linebreak(const char *title, const alpm_list_t *list,
 	}
 }
 
-void signature_display(const char *title, alpm_siglist_t *siglist,
+void signature_display(const char *title, alpm_list_t *siglist,
 		unsigned short maxcols)
 {
 	unsigned short len = 0;
@@ -7110,7 +7113,7 @@ void signature_display(const char *title, alpm_siglist_t *siglist,
 					break;
 			}
 			name = result->key.uid ? result->key.uid : result->key.fingerprint;
-			ret = pm_asprintf(&sigline, _("%s, %s from \"%s\""),
+			ret = vsprintf(&sigline, _("%s, %s from \"%s\""),
 					status, validity, name);
 			if(ret == -1) {
 				continue;
@@ -7128,7 +7131,7 @@ static alpm_list_t *create_verbose_header(size_t count)
 	alpm_list_t *ret = NULL;
 
 	char *header;
-	pm_asprintf(&header, "%s (%zu)", _("Package"), count);
+	vsprintf(&header, "%s (%zu)", _("Package"), count);
 
 	add_table_cell(&ret, header, CELL_TITLE | CELL_FREE);
 	add_table_cell(&ret, _("Old Version"), CELL_TITLE);
@@ -7140,7 +7143,7 @@ static alpm_list_t *create_verbose_header(size_t count)
 }
 
 /* returns package info as list of strings */
-static alpm_list_t *create_verbose_row(pm_target_t *target)
+static alpm_list_t *create_verbose_row(pm_targets *target)
 {
 	char *str;
 	off_t size = 0;
@@ -7150,23 +7153,23 @@ static alpm_list_t *create_verbose_row(pm_target_t *target)
 
 	/* a row consists of the package name, */
 	if(target->install) {
-		const alpm_db_t *db = alpm_pkg_get_db(target->install);
+		const pmdb_t *db = alpm_pkg_get_db(target->install);
 		if(db) {
-			pm_asprintf(&str, "%s/%s", alpm_db_get_name(db), alpm_pkg_get_name(target->install));
+			vsprintf(&str, "%s/%s", alpm_db_get_name(db), alpm_pkg_get_name(target->install));
 		} else {
-			pm_asprintf(&str, "%s", alpm_pkg_get_name(target->install));
+			vsprintf(&str, "%s", alpm_pkg_get_name(target->install));
 		}
 	} else {
-		pm_asprintf(&str, "%s", alpm_pkg_get_name(target->remove));
+		vsprintf(&str, "%s", alpm_pkg_get_name(target->remove));
 	}
 	add_table_cell(&ret, str, CELL_NORMAL | CELL_FREE);
 
 	/* old and new versions */
-	pm_asprintf(&str, "%s",
+	vsprintf(&str, "%s",
 			target->remove != NULL ? alpm_pkg_get_version(target->remove) : "");
 	add_table_cell(&ret, str, CELL_NORMAL | CELL_FREE);
 
-	pm_asprintf(&str, "%s",
+	vsprintf(&str, "%s",
 			target->install != NULL ? alpm_pkg_get_version(target->install) : "");
 	add_table_cell(&ret, str, CELL_NORMAL | CELL_FREE);
 
@@ -7174,13 +7177,13 @@ static alpm_list_t *create_verbose_row(pm_target_t *target)
 	size -= target->remove ? alpm_pkg_get_isize(target->remove) : 0;
 	size += target->install ? alpm_pkg_get_isize(target->install) : 0;
 	human_size = humanize_size(size, 'M', 2, &label);
-	pm_asprintf(&str, "%.2f %s", human_size, label);
+	vsprintf(&str, "%.2f %s", human_size, label);
 	add_table_cell(&ret, str, CELL_RIGHT_ALIGN | CELL_FREE);
 
 	size = target->install ? alpm_pkg_download_size(target->install) : 0;
 	if(size != 0) {
 		human_size = humanize_size(size, 'M', 2, &label);
-		pm_asprintf(&str, "%.2f %s", human_size, label);
+		vsprintf(&str, "%.2f %s", human_size, label);
 	} else {
 		str = NULL;
 	}
@@ -7203,7 +7206,7 @@ static void _display_targets(alpm_list_t *targets, int verbose)
 
 	/* gather package info */
 	for(i = targets; i; i = alpm_list_next(i)) {
-		pm_target_t *target = i->data;
+		pm_targets *target = i->data;
 
 		if(target->install) {
 			dlsize += alpm_pkg_download_size(target->install);
@@ -7217,27 +7220,27 @@ static void _display_targets(alpm_list_t *targets, int verbose)
 
 	/* form data for both verbose and non-verbose display */
 	for(i = targets; i; i = alpm_list_next(i)) {
-		pm_target_t *target = i->data;
+		pm_targets *target = i->data;
 
 		if(verbose) {
 			rows = alpm_list_add(rows, create_verbose_row(target));
 		}
 
 		if(target->install) {
-			pm_asprintf(&str, "%s%s-%s%s", alpm_pkg_get_name(target->install), config->colstr.faint,
+			vsprintf(&str, "%s%s-%s%s", alpm_pkg_get_name(target->install), config->colstr.faint,
 					alpm_pkg_get_version(target->install), config->colstr.nocolor);
 		} else if(isize == 0) {
-			pm_asprintf(&str, "%s%s-%s%s", alpm_pkg_get_name(target->remove), config->colstr.faint,
+			vsprintf(&str, "%s%s-%s%s", alpm_pkg_get_name(target->remove), config->colstr.faint,
 					alpm_pkg_get_version(target->remove), config->colstr.nocolor);
 		} else {
-			pm_asprintf(&str, "%s%s-%s %s[%s]%s", alpm_pkg_get_name(target->remove), config->colstr.faint,
+			vsprintf(&str, "%s%s-%s %s[%s]%s", alpm_pkg_get_name(target->remove), config->colstr.faint,
 					alpm_pkg_get_version(target->remove), config->colstr.nocolor, _("removal"), config->colstr.nocolor);
 		}
 		names = alpm_list_add(names, str);
 	}
 
 	/* print to screen */
-	pm_asprintf(&str, "%s (%zu)", _("Packages"), alpm_list_count(targets));
+	vsprintf(&str, "%s (%zu)", _("Packages"), alpm_list_count(targets));
 	printf("\n");
 
 	cols = getcols();
@@ -7278,8 +7281,8 @@ static void _display_targets(alpm_list_t *targets, int verbose)
 
 static int target_cmp(const void *p1, const void *p2)
 {
-	const pm_target_t *targ1 = p1;
-	const pm_target_t *targ2 = p2;
+	const pm_targets *targ1 = p1;
+	const pm_targets *targ2 = p2;
 	/* explicit are always sorted after implicit (e.g. deps, pulled targets) */
 	if(targ1->is_explicit != targ2->is_explicit) {
 		return targ1->is_explicit > targ2->is_explicit;
@@ -7294,19 +7297,19 @@ static int target_cmp(const void *p1, const void *p2)
 static int pkg_cmp(const void *p1, const void *p2)
 {
 	/* explicit cast due to (un)necessary removal of const */
-	alpm_pkg_t *pkg1 = (alpm_pkg_t *)p1;
-	alpm_pkg_t *pkg2 = (alpm_pkg_t *)p2;
+	pmpkg_t *pkg1 = (pmpkg_t *)p1;
+	pmpkg_t *pkg2 = (pmpkg_t *)p2;
 	return strcmp(alpm_pkg_get_name(pkg1), alpm_pkg_get_name(pkg2));
 }
 
 void display_targets(void)
 {
 	alpm_list_t *i, *targets = NULL;
-	alpm_db_t *db_local = alpm_get_localdb(config->handle);
+	pmdb_t *db_local = alpm_get_localdb(config->handle);
 
 	for(i = alpm_trans_get_add(config->handle); i; i = alpm_list_next(i)) {
-		alpm_pkg_t *pkg = i->data;
-		pm_target_t *targ = calloc(1, sizeof(pm_target_t));
+		pmpkg_t *pkg = i->data;
+		pm_targets *optarg = calloc(1, sizeof(pm_targets));
 		if(!targ) return;
 		targ->install = pkg;
 		targ->remove = alpm_db_get_pkg(db_local, alpm_pkg_get_name(pkg));
@@ -7315,9 +7318,9 @@ void display_targets(void)
 		}
 		targets = alpm_list_add(targets, targ);
 	}
-	for(i = alpm_trans_get_remove(config->handle); i; i = alpm_list_next(i)) {
-		alpm_pkg_t *pkg = i->data;
-		pm_target_t *targ = calloc(1, sizeof(pm_target_t));
+	for(i = alpm_trans_get_remove(config->handle); i; i = alpm_list_next(i)) { //too many arguments
+		pmpkg_t *pkg = i->data;
+		pm_targets *optarg = calloc(1, sizeof(pm_targets));
 		if(!targ) return;
 		targ->remove = pkg;
 		if(alpm_list_find(config->explicit_removes, pkg, pkg_cmp)) {
@@ -7331,10 +7334,10 @@ void display_targets(void)
 	FREELIST(targets);
 }
 
-static off_t pkg_get_size(alpm_pkg_t *pkg)
+static off_t pkg_get_size(pmpkg_t *pkg)
 {
 	switch(config->op) {
-		case PM_OP_SYNC:
+		case O_SYNC:
 			return alpm_pkg_download_size(pkg);
 		case PM_OP_UPGRADE:
 			return alpm_pkg_get_size(pkg);
@@ -7343,7 +7346,7 @@ static off_t pkg_get_size(alpm_pkg_t *pkg)
 	}
 }
 
-static char *pkg_get_location(alpm_pkg_t *pkg)
+static char *pkg_get_location(pmpkg_t *pkg)
 {
 	alpm_list_t *servers;
 	char *string = NULL;
@@ -7359,7 +7362,7 @@ static char *pkg_get_location(alpm_pkg_t *pkg)
 				for(i = alpm_option_get_cachedirs(config->handle); i; i = i->next) {
 					snprintf(path, PATH_MAX, "%s%s", (char *)i->data, pkgfile);
 					if(stat(path, &buf) == 0 && S_ISREG(buf.st_mode)) {
-						pm_asprintf(&string, "file://%s", path);
+						vsprintf(&string, "file://%s", path);
 						return string;
 					}
 				}
@@ -7367,7 +7370,7 @@ static char *pkg_get_location(alpm_pkg_t *pkg)
 
 			servers = alpm_db_get_servers(alpm_pkg_get_db(pkg));
 			if(servers) {
-				pm_asprintf(&string, "%s/%s", (char *)(servers->data),
+				vsprintf(&string, "%s/%s", (char *)(servers->data),
 						alpm_pkg_get_filename(pkg));
 				return string;
 			}
@@ -7380,7 +7383,7 @@ static char *pkg_get_location(alpm_pkg_t *pkg)
 
 		case ALPM_PKG_FROM_LOCALDB:
 		default:
-			pm_asprintf(&string, "%s-%s", alpm_pkg_get_name(pkg), alpm_pkg_get_version(pkg));
+			vsprintf(&string, "%s-%s", alpm_pkg_get_name(pkg), alpm_pkg_get_version(pkg));
 			return string;
 	}
 }
@@ -7447,7 +7450,7 @@ void print_packages(const alpm_list_t *packages)
 		config->print_format = strdup("%l");
 	}
 	for(i = packages; i; i = alpm_list_next(i)) {
-		alpm_pkg_t *pkg = i->data;
+		pmpkg_t *pkg = i->data;
 		char *string = strdup(config->print_format);
 		char *temp = string;
 		/* %n : pkgname */
@@ -7473,7 +7476,7 @@ void print_packages(const alpm_list_t *packages)
 		/* %r : repo */
 		if(strstr(temp, "%r")) {
 			const char *repo = "local";
-			alpm_db_t *db = alpm_pkg_get_db(pkg);
+			pmdb_t *db = alpm_pkg_get_db(pkg);
 			if(db) {
 				repo = alpm_db_get_name(db);
 			}
@@ -7484,7 +7487,7 @@ void print_packages(const alpm_list_t *packages)
 		/* %s : size */
 		if(strstr(temp, "%s")) {
 			char *size;
-			pm_asprintf(&size, "%jd", (intmax_t)pkg_get_size(pkg));
+			vsprintf(&size, "%jd", (intmax_t)alpm_pkg_get_size(pkg));
 			string = strreplace(temp, "%s", size);
 			free(size);
 			free(temp);
@@ -7504,8 +7507,8 @@ void print_packages(const alpm_list_t *packages)
  */
 static int depend_cmp(const void *d1, const void *d2)
 {
-	const alpm_depend_t *dep1 = d1;
-	const alpm_depend_t *dep2 = d2;
+	const pmdepend_t *dep1 = d1;
+	const pmdepend_t *dep2 = d2;
 	int ret;
 
 	ret = strcmp(dep1->name, dep2->name);
@@ -7534,9 +7537,9 @@ static int depend_cmp(const void *d1, const void *d2)
 	return ret;
 }
 
-static char *make_optstring(alpm_depend_t *optdep)
+static char *make_optstring(pmdepend_t *optdep)
 {
-	alpm_db_t *localdb = alpm_get_localdb(config->handle);
+	pmdb_t *localdb = alpm_get_localdb(config->handle);
 	char *optstring = alpm_dep_compute_string(optdep);
 	char *status = NULL;
 	if(alpm_find_satisfier(alpm_db_get_pkgcache(localdb), optstring)) {
@@ -7551,7 +7554,7 @@ static char *make_optstring(alpm_depend_t *optdep)
 	return optstring;
 }
 
-void display_new_optdepends(alpm_pkg_t *oldpkg, alpm_pkg_t *newpkg)
+void display_new_optdepends(pmpkg_t *oldpkg, pmpkg_t *newpkg)
 {
 	alpm_list_t *i, *old, *new, *optdeps, *optstrings = NULL;
 
@@ -7561,7 +7564,7 @@ void display_new_optdepends(alpm_pkg_t *oldpkg, alpm_pkg_t *newpkg)
 
 	/* turn optdepends list into a text list */
 	for(i = optdeps; i; i = alpm_list_next(i)) {
-		alpm_depend_t *optdep = i->data;
+		pmdepend_t *optdep = i->data;
 		optstrings = alpm_list_add(optstrings, make_optstring(optdep));
 	}
 
@@ -7575,7 +7578,7 @@ void display_new_optdepends(alpm_pkg_t *oldpkg, alpm_pkg_t *newpkg)
 	FREELIST(optstrings);
 }
 
-void display_optdepends(alpm_pkg_t *pkg)
+void display_optdepends(pmpkg_t *pkg)
 {
 	alpm_list_t *i, *optdeps, *optstrings = NULL;
 
@@ -7583,7 +7586,7 @@ void display_optdepends(alpm_pkg_t *pkg)
 
 	/* turn optdepends list into a text list */
 	for(i = optdeps; i; i = alpm_list_next(i)) {
-		alpm_depend_t *optdep = i->data;
+		pmdepend_t *optdep = i->data;
 		optstrings = alpm_list_add(optstrings, make_optstring(optdep));
 	}
 
@@ -7616,8 +7619,8 @@ void select_display(const alpm_list_t *pkglist)
 	unsigned short cols = getcols();
 
 	for(i = pkglist; i; i = i->next) {
-		alpm_pkg_t *pkg = i->data;
-		alpm_db_t *db = alpm_pkg_get_db(pkg);
+		pmpkg_t *pkg = i->data;
+		pmdb_t *db = alpm_pkg_get_db(pkg);
 
 		if(!dbname) {
 			dbname = alpm_db_get_name(db);
@@ -7628,7 +7631,7 @@ void select_display(const alpm_list_t *pkglist)
 			dbname = alpm_db_get_name(db);
 		}
 		string = NULL;
-		pm_asprintf(&string, "%d) %s", nth, alpm_pkg_get_name(pkg));
+		vsprintf(&string, "%d) %s", nth, alpm_pkg_get_name(pkg));
 		list = alpm_list_add(list, string);
 		nth++;
 	}
@@ -7642,7 +7645,7 @@ static int parseindex(char *s, int *val, int min, int max)
 	int n = strtol(s, &endptr, 10);
 	if(*endptr == '\0') {
 		if(n < min || n > max) {
-			pm_printf(ALPM_LOG_ERROR,
+			pm_printf(PM_LOG_ERROR,
 					_("invalid value: %d is not between %d and %d\n"),
 					n, min, max);
 			return -1;
@@ -7650,7 +7653,7 @@ static int parseindex(char *s, int *val, int min, int max)
 		*val = n;
 		return 0;
 	} else {
-		pm_printf(ALPM_LOG_ERROR, _("invalid number: %s\n"), s);
+		pm_printf(PM_LOG_ERROR, _("invalid number: %s\n"), s);
 		return -1;
 	}
 }
@@ -7713,13 +7716,13 @@ static int multiselect_parse(char *array, int count, char *response)
 
 void console_cursor_hide(void) {
 	if(isatty(fileno(stdout))) {
-		printf(CURSOR_HIDE_ANSICODE);
+		printf("cursor hide ansicode");
 	}
 }
 
 void console_cursor_show(void) {
 	if(isatty(fileno(stdout))) {
-		printf(CURSOR_SHOW_ANSICODE);
+		printf("Cursor show ansicode");
 	}
 }
 
@@ -7983,7 +7986,7 @@ int colon_printf(const char *fmt, ...)
 	return ret;
 }
 
-int pm_printf(alpm_loglevel_t level, const char *format, ...)
+int pm_printf(pm_loglevel_t level, const char *format, ...)
 {
 	int ret;
 	va_list args;
@@ -7996,15 +7999,15 @@ int pm_printf(alpm_loglevel_t level, const char *format, ...)
 	return ret;
 }
 
-int pm_asprintf(char **string, const char *format, ...)
+int vsprintf(char **string, const char *format, ...)
 {
 	int ret = 0;
 	va_list args;
 
 	/* print the message using va_arg list */
 	va_start(args, format);
-	if(vasprintf(string, format, args) == -1) {
-		pm_printf(ALPM_LOG_ERROR, _("failed to allocate string\n"));
+	if(vsprintf(string, format, args) == -1) {
+		pm_printf(PM_LOG_ERROR, _("failed to allocate string\n"));
 		ret = -1;
 	}
 	va_end(args);
@@ -8012,20 +8015,20 @@ int pm_asprintf(char **string, const char *format, ...)
 	return ret;
 }
 
-int pm_sprintf(char **string, alpm_loglevel_t level, const char *format, ...)
+int pm_sprintf(char **string, pm_loglevel_t level, const char *format, ...)
 {
 	int ret = 0;
 	va_list args;
 
 	/* print the message using va_arg list */
 	va_start(args, format);
-	ret = pm_vasprintf(string, level, format, args);
+	ret = pm_vsprintf(string, level, format, args);
 	va_end(args);
 
 	return ret;
 }
 
-int pm_vasprintf(char **string, alpm_loglevel_t level, const char *format, va_list args)
+int pm_vsprintf(char **string, pm_loglevel_t level, const char *format, va_list args)
 {
 	int ret = 0;
 	char *msg = NULL;
@@ -8036,26 +8039,26 @@ int pm_vasprintf(char **string, alpm_loglevel_t level, const char *format, va_li
 	}
 
 	/* print the message using va_arg list */
-	ret = vasprintf(&msg, format, args);
+	ret = vsprintf(&msg, format, args);
 
 	/* print a prefix to the message */
 	switch(level) {
-		case ALPM_LOG_ERROR:
-			pm_asprintf(string, "%s%s%s%s", config->colstr.err, _("error: "),
+		case PM_LOG_ERROR:
+			vsprintf(string, "%s%s%s%s", config->colstr.err, _("error: "),
 								config->colstr.nocolor, msg);
 			break;
-		case ALPM_LOG_WARNING:
-			pm_asprintf(string, "%s%s%s%s", config->colstr.warn, _("warning: "),
+		case PM_LOG_WARNING:
+			vsprintf(string, "%s%s%s%s", config->colstr.warn, _("warning: "),
 								config->colstr.nocolor, msg);
 			break;
-		case ALPM_LOG_DEBUG:
-			pm_asprintf(string, "debug: %s", msg);
+		case PM_LOG_DEBUG:
+			vsprintf(string, "debug: %s", msg);
 			break;
-		case ALPM_LOG_FUNCTION:
-			pm_asprintf(string, "function: %s", msg);
+		case PM_LOG_FUNCTION:
+			vsprintf(string, "function: %s", msg);
 			break;
 		default:
-			pm_asprintf(string, "%s", msg);
+			vsprintf(string, "%s", msg);
 			break;
 	}
 	free(msg);
@@ -8063,7 +8066,7 @@ int pm_vasprintf(char **string, alpm_loglevel_t level, const char *format, va_li
 	return ret;
 }
 
-int pm_vfprintf(FILE *stream, alpm_loglevel_t level, const char *format, va_list args)
+int pm_vfprintf(FILE *stream, pm_loglevel_t level, const char *format, va_list args)
 {
 	int ret = 0;
 
@@ -8074,7 +8077,7 @@ int pm_vfprintf(FILE *stream, alpm_loglevel_t level, const char *format, va_list
 
 #if defined(PACMAN_DEBUG)
 	/* If debug is on, we'll timestamp the output */
-	if(config->logmask & ALPM_LOG_DEBUG) {
+	if(config->logmask & PM_LOG_DEBUG) {
 		time_t t;
 		struct tm *tmp;
 		char timestr[10] = {0};
@@ -8090,18 +8093,18 @@ int pm_vfprintf(FILE *stream, alpm_loglevel_t level, const char *format, va_list
 
 	/* print a prefix to the message */
 	switch(level) {
-		case ALPM_LOG_ERROR:
+		case PM_LOG_ERROR:
 			fprintf(stream, "%s%s%s", config->colstr.err, _("error: "),
 					config->colstr.nocolor);
 			break;
-		case ALPM_LOG_WARNING:
+		case PM_LOG_WARNING:
 			fprintf(stream, "%s%s%s", config->colstr.warn, _("warning: "),
 					config->colstr.nocolor);
 			break;
-		case ALPM_LOG_DEBUG:
+		case PM_LOG_DEBUG:
 			fprintf(stream, "debug: ");
 			break;
-		case ALPM_LOG_FUNCTION:
+		case PM_LOG_FUNCTION:
 			fprintf(stream, "function: ");
 			break;
 		default:

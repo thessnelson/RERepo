@@ -18,7 +18,7 @@
 #include <getopt.h>
 
 /*
-Common errors I'm seeing:
+Common errors I'm seeing: yep.
 "too few arguments for parseconfig"- there are 0 arguments in main, needs 1.
 "invalid conversion from char to const char"- in main
 "too few arguments for alpm_option_set_logfile"

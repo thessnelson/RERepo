@@ -10,6 +10,29 @@
 #include <sys/utsname.h>
 #include <getopt.h>
 
+/*
+Functions to potentially improve:
+-handler(). EXCLUSIVE TO THIS VERSION.
+-parsearg_op(). Reference pacman.c
+-parseargs()
+-cleansync() and all the cache stuff should be merged.
+-config_new(). Reference conf.c
+-needs_root(). Reference util.c
+WHATEVER IS AT LINE 338-354 MAKES NO SENSE TO ME. WHAT IS IT?
+    -NEVERMIND, THIS IS FROM QUERY.C. NOT ORIGINAL!
+-All the other string stuff is in util.c.
+-Line 757 is from check.c and is either "fast" or "full"
+
+-Currently looking for void cb_trans_evt(pmpkg_t* pkg, char* switch_val) {
+    might be cb_event from callback. not sure.
+
+-cb_trans_conv is intentionally bad and needs fixed.
+    "Your code is bad and you should feel bad for making it"
+
+-there's some db.lock stuff. look at lockfile or alpm_option_get via pacman.
+pacman/src/pacman/pacman.c
+*/
+
 // Global variables
 int* config;
 alpm_list_t* pm_targets;
@@ -19,20 +42,20 @@ alpm_list_t* output;
 timeval* last_time;
 
 // Helper functions
-void pm_vfprintf(const char* template) {
+void pm_vfprintf(const char* template) { //Write formatted data from variable -> ostream
     va_list ap;
     vfprintf(stderr, template, ap);
 }
 
-void pm_printf(const char* template) {
+void pm_printf(const char* template) { //print formatted data to stdout
     pm_vfprintf(template);
 }
 
-void pm_fprintf(const char* template) {
+void pm_fprintf(const char* template) { //Write formattwed data to stream
     pm_vfprintf(template);
 }
 
-void pm_asprintf(const char* template, char** vals) {
+void pm_asprintf(const char* template, char** vals) { //Print to allocated string
     va_list va;
     out = vasprintf(vals, template, &va);
 
@@ -41,46 +64,65 @@ void pm_asprintf(const char* template, char** vals) {
     }
 }
 
+//gets file info and writes it somewhere on the drive.
+//There's some weird stuff going on with this one.
 void handler(int input) {
-    fileno(stdout);
+    fileno(stdout); //gets the description of a stdio stream
     fileno(stderr);
 
+    //if we try to write in a place we shouldnt.
     if (input == 0xb) {
         strlen("Error: Segmentation fault!\n");
-        xwrite();
+        xwrite(); //EXTERNAL GNU LIBRARY- writes to data blocks
 
-        exit(0xb);
+        exit(0xb); // terminates calling process
     } if (input == 2) {
         strlen("\nInterrupt signal received.\n");
         xwrite();
         
+        // if we don't flag the transaction to interrupt, we keep moving.
         if (alpm_trans_interrupt() == 0) {
             return;
         }
         xwrite();
     }
 
-    exit(input);
+    exit(input); //Once we're done, get out!
 } 
 
+//Literally just prints stuff. Nothing special. I might mod it though
 void version() {
-    puts("  ____            _                                        ");
-    puts(" |  _ \\ __ _  ___| | ____ _  __ _  ___                     ");
-    puts(" | |_) / _` |/ __| |/ / _` |/ _` |/ _ \\                    ");
-    puts(" |  __/ (_| | (__|   < (_| | (_| |  __/                    ");
-    puts(" |_|  _\\__,_|\\___ |_|\\_\\__,_|\\__, |\\___|                    ");
-    puts(" |  \\/  (_)___ _ __ ___   __|___/__   __ _  __ _  ___ _ __ ");
-    puts(" | |\\/| | / __| \'_ ` _ \\ / _` | \'_ \\ / _` |/ _` |/ _ \\ \'__|");
-    puts(" | |  | | \\__ \\ | | | | | (_| | | | | (_| | (_| |  __/ |   ");
-    puts(" |_|  |_|_|___/_| |_| |_|\\__,_|_| |_|\\__,_|\\__, |\\___ |_|   ");
-    puts("                                           |___/           ");
-    return;
+    puts("/*@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+    puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+    puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+    puts("@@@@@@@@@@//////////(/////////////////////@@@@@@@@\n");
+    puts("@@@@@(/........................////////////////@@@\n");
+    puts("@@//..............................///////////////(\n");
+    puts("//................PACMAN..........////////////////\n");
+    puts("/,................BY................//////////////\n");
+    puts("//................GROUP.4..........///////////////\n");
+    puts("@(/(.............................,////////////////\n");
+    puts("@@@@//............GET...........///////////////@@@\n");
+    puts("@@@@//............THIS..........///////////////@@@\n");
+    puts("@@@@//............BREAD.........///////////////@@@\n");
+    puts("@@@@//..........................///////////////@@@\n");
+    puts("@@@@//..........................///////////////@@@\n");
+    puts("@@@@//..........................///////////////@@@\n");
+    puts("@@@@//..........................///////////////@@@\n");
+    puts("@@@@@@///.................../////////////////@@@@@\n");
+    puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+    puts("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*/\n");
 }
 
+// PACMAN.C Section of the code! //
+
+//returns the pathname of a given package.
+//Nothing to improve
 char* mbasename(char* input) {
     return strrchr(input, '/');
 }
 
+//Lists out options or packages for everything. Nothing to fix.
 void usage(int argc, char* argv) {
     alpm_list_t* opt_str = gettext("options");
     alpm_list_t* pkg_str = gettext("package(s)");
@@ -132,11 +174,15 @@ void usage(int argc, char* argv) {
     return;
 }
 
+//Lots of weird bitwise stuff.
+//There's probably something to improve, just not sure what yet.
 void parsearg_op(int param1, int param2) {
     short temp;
-    int in_ESI;
-    int in_EDI;
+    //Neither of these variables are used!!
+    int in_ESI; //Source index
+    int in_EDI; //Destination index
     
+    //There's some kind of swap going on.
     if (param2 == 0x68) {
         if (param1 == 0) {
         config[4] = 1;
@@ -169,6 +215,8 @@ void parsearg_op(int param1, int param2) {
     return;
 }
 
+//The other version uses switch cases. Is that faster?
+//Making sure the arguments end up in the right places.
 void parsearg_query(int opt) {
     if (opt == 0x69) {
         config[0x42]++;
@@ -177,6 +225,7 @@ void parsearg_query(int opt) {
     }
 }
 
+//Again, the other one used a ton of switch cases.
 void parsearg_sync(int opt) {
     if (opt == 0x3f3) {
         config[0x68] = config[0x68] | 0x2000;
@@ -199,6 +248,7 @@ void parsearg_sync(int opt) {
     return;
 }
 
+//Pacman version is much cleaner. Parses tags for everything.
 void parseargs(int argc, char** argv) {
     int opt;
     int option_index = 0;
@@ -253,10 +303,11 @@ void parseargs(int argc, char** argv) {
     }
 }
 
-int* config_new() {
+//From conf.c. FIX THIS!!!
+void config_new() {
     char *conf_path;
     
-    int* config = (int *)calloc(1, 0x98);
+    config = (int *)calloc(1, 0x98);
 
     if (config == NULL) {
         pm_fprintf(gettext("malloc failure: could not allocate %zd bytes\n"));
@@ -267,9 +318,11 @@ int* config_new() {
         *(char **)(config + 0x10) = conf_path;
     }
 
-    return config;
+    return;
 }
 
+//The password is "incorrect"...lol
+//References util.c
 void needs_root() {
     int pass;
     char *input;
@@ -293,6 +346,8 @@ void needs_root() {
     exit(1);
 }
 
+//lists targeted packages.
+//I THINK THIS IS FROM QUERY.C
 alpm_list_t* filter(pmpkg_t* pkg_data) {
     int pkg_reason;
     alpm_list_t* output;
@@ -309,11 +364,14 @@ alpm_list_t* filter(pmpkg_t* pkg_data) {
     }
     return output;
 }
+// UTIL.C SECTION OF THE CODE! //
 
+//ref'd util.c
 int getcols() {
     return ioctl(1, 0x5413);
 }
 
+//Ref'd from util.c
 int string_length(void* str) {
     if(str != NULL) {
         int len = strlen(str) + 1;
@@ -324,6 +382,7 @@ int string_length(void* str) {
     return 0;
 }
 
+//Ref'd util.c
 void indent_print(char* input_str, int len) {
     int str_len;
     size_t input_len;
@@ -388,6 +447,7 @@ void indent_print(char* input_str, int len) {
     return;
 }
 
+//ref'd from util.c
 void string_display(char* str1, void* str2) {
     if (str1 != NULL) {
         printf("%s", str1);
@@ -404,6 +464,7 @@ void string_display(char* str1, void* str2) {
     putchar(10);
 }
 
+//Ref'd from util.c
 void list_display(char* field, alpm_list_t* list) {
     void* data;
     int new_len;
@@ -451,6 +512,7 @@ void list_display(char* field, alpm_list_t* list) {
     return;
 }
 
+//Ref'd from util.c
 void list_display_linebreak(char* field, alpm_list_t* list) {
     int n = 0;
     
@@ -477,7 +539,9 @@ void list_display_linebreak(char* field, alpm_list_t* list) {
 
     return;
 }
+// CHECK.C SECTION OF THE CODE //
 
+//Calcs a checksum, which is a direct reference to package.c
 int get_backup_file_status(alpm_list_t* val, char* cs) {
     char *__s1;
     char buf [4104];
@@ -501,6 +565,8 @@ int get_backup_file_status(alpm_list_t* val, char* cs) {
 
     return output;
 }
+
+// PACKAGE.C SECTION OF THE CODE //
 
 void dump_pkg_backups(pmpkg_t* pkg_data) {
     const char* root = alpm_option_get_root();
@@ -686,6 +752,7 @@ void dump_pkg_changelog(pmpkg_t* pkg_data) {
     }
 }
 
+//CANT FIND THIS ONE FOR SOME REASON
 void dump_pkg_sync(pmpkg_t* pkg_data, pmdb_t* db) {
     if (pkg_data != 0) {
         string_display(gettext("Repository     :"), alpm_pkg_get_name(pkg_data));
@@ -695,6 +762,9 @@ void dump_pkg_sync(pmpkg_t* pkg_data, pmdb_t* db) {
     return;
 }
 
+// THIS IS FOR CHECK.C again //
+
+//check_pkg_full??
 void check(pmpkg_t* pkg_data) {
     struct stat sb;
     char buf [4104];
@@ -727,6 +797,8 @@ void check(pmpkg_t* pkg_data) {
         pm_fprintf(gettext("Warning: The following path is too long: %s%s\n"));
     }
 }
+
+// THIS IS FROM QUERY.C //
 
 void display(pmpkg_t* pkg_data) {
     if (*(short*)(config + 0x42) != 0) {
@@ -762,6 +834,7 @@ char* mbasename(char* input) {
     return strrchr(input, '/');
 }
 
+//cannot find this one yet. Still looking! I know it's in query
 char* mdirname(char* input) {
     char* output;
 
@@ -779,7 +852,8 @@ char* mdirname(char* input) {
     }
     return output;
 }
-sync_clea
+
+// lrealpath from query.c arguments are slightly different tho
 char* resolve_path(char* input) {
     char* __resolved = (char *)calloc(0x1001,1);
 
@@ -987,6 +1061,7 @@ void query_search(alpm_list_t* pm_targets) {
     return;
 }
 
+//pacman_query from query.c
 void p_query(alpm_list_t* pm_targets) {
     alpm_list_t* syncdb;
     size_t db_count;
@@ -1058,6 +1133,7 @@ void p_query(alpm_list_t* pm_targets) {
     }
 }
 
+//From util.c. pmpkg_t is alpm_pkg_t
 void display_optdepends(pmpkg_t* pkg) {
     alpm_list_t* pkg_opt_depends = alpm_pkg_get_optdepends(pkg);
 
@@ -1069,6 +1145,8 @@ void display_optdepends(pmpkg_t* pkg) {
     return;
 }
 
+//what does cb stand for? Callback event
+//cb_event from callback.c ?
 void cb_trans_evt(pmpkg_t* pkg, char* switch_val) {
     switch(switch_val) {
         case 9:
@@ -1098,6 +1176,7 @@ void cb_trans_evt(pmpkg_t* pkg, char* switch_val) {
     return;
 }
 
+//from util.c
 void display_repo_list(alpm_list_t* list) {
     printf(":: ");
     list_display((char *)gettext("Repository %s\n"), list);
@@ -1105,6 +1184,7 @@ void display_repo_list(alpm_list_t* list) {
     return;
 }
 
+//from util.c
 void select_display(alpm_list_t* head) {
     alpm_list_t* list = 0;
     char* db_name = (char *)0x0;
@@ -1132,6 +1212,7 @@ void select_display(alpm_list_t* head) {
     display_repo_list(list);
 }
 
+//util.c
 void flush_term_input() {
     int f;
 
@@ -1144,6 +1225,7 @@ void flush_term_input() {
     return;
 }
 
+//util-common.c
 void strtrim(char* str) {
     char* temp;
     ushort** out;
@@ -1174,6 +1256,7 @@ void strtrim(char* str) {
     return;
 }
 
+//util.c
 int parseindex(char* str, int* out, int lower_bound, int higher_bound) {
     char* temp = (char *)0x0;
     long long_val = strtol(str, &temp, 10);
@@ -1195,6 +1278,7 @@ int parseindex(char* str, int* out, int lower_bound, int higher_bound) {
     return int_val;
 }
 
+//util.c
 int select_question() {
     FILE* ss_out;
 
@@ -1227,6 +1311,7 @@ int select_question() {
     return;
 }
 
+//multiselect_question from util.c ?
 int question(char* str, va_list va, int val) {
     char* f;
     int case_out;
@@ -1280,16 +1365,20 @@ int question(char* str, va_list va, int val) {
     return case_out;
 }
 
+//util.c
 int yesno(char* str) {
     struct va_list va;
     return question(str, va, 1);
 }
 
+//util.c
 int noyes(char* str) {
     struct va_list va;
     return question(str, va, 0);
 }
 
+//THIS ONE DEFINITELY NEEDS HELP! I THINK THEY INTENTIONALLY MESSED THIS UP
+//I THINK THIS IS CB_QUESTION FROM callback.c?
 void cb_trans_conv(char* depends, char* second_dep, char* list, uint config, uint* out) {
     pm_printf(gettext("TODO this is one of the worst ever functions written. void *data ? wtf\n"));
 
@@ -1330,6 +1419,7 @@ void cb_trans_conv(char* depends, char* second_dep, char* list, uint config, uin
     return;
 }
 
+//callback.c
 double get_update_timediff(int in) {
     timeval ts;
 
@@ -1347,6 +1437,8 @@ double get_update_timediff(int in) {
     }
 }
 
+//fill_progress from callback.c
+//figured this out from a comment in callback.c!
 void cb_trans_progress(ulong input, int c, char *str, size_t len, alpm_list_t* in_R8) {
     int int_str_len;
     size_t sVar1;
@@ -1447,6 +1539,7 @@ void cb_trans_progress(ulong input, int c, char *str, size_t len, alpm_list_t* i
     return;
 }
 
+//from util.c
 int trans_init(pmtransflags_t* flags) {
     int out;
 
@@ -1463,6 +1556,7 @@ int trans_init(pmtransflags_t* flags) {
     return out;
 }
 
+//sync_trans from sync.c ? closest thing I could find.
 int sync_synctree(pmpkg_t* syncdb, int level) {
     pmtransflag_t* flags;
     int count = 0;
@@ -1515,6 +1609,7 @@ void print_installed(pmdb_t* db, pmpkg_t* pkg) {
     return;
 }
 
+//from sync.c
 void sync_list(alpm_list_t* pm_targets, alpm_list_t* syncdb) {
     alpm_list_t* db_list;
     alpm_list_t* i = pm_targets;
@@ -1573,6 +1668,7 @@ void sync_list(alpm_list_t* pm_targets, alpm_list_t* syncdb) {
     }
 }
 
+//from sync.c
 void sync_info(alpm_list_t* pm_targets, char** syncdb) {
     char** i = (char **)pm_targets;
     char** sync_db = syncdb_char;
@@ -1650,6 +1746,7 @@ void sync_info(alpm_list_t* pm_targets, char** syncdb) {
     }
 }
 
+//from sync.c
 void sync_search(alpm_list_t* pm_targets, alpm_list_t* syncdb) {
     for (alpm_list_t* i = syncdb; i != 0; i = alpm_list_next(i)) {
         pmdb_t* s_db = alpm_list_getdata(i);
@@ -1717,6 +1814,7 @@ void sync_search(alpm_list_t* pm_targets, alpm_list_t* syncdb) {
     return;
 }
 
+//from sync.c
 void sync_cleancache(int c) {
     alpm_list_t* syncdbs = alpm_option_get_syncdbs();
     pmdb_t* localdb = alpm_option_get_localdb();
@@ -1819,6 +1917,7 @@ void sync_cleancache(int c) {
     }
 }
 
+//from util.c
 void rmrf(char* dir) {
     int d = unlink(dir);
     char buf[4104];
@@ -1841,7 +1940,7 @@ void rmrf(char* dir) {
                             rmrf(err_loc);
                         }
                     }
-
+                    
                     dr = readdir(__dirp);
                 }
 
@@ -1854,6 +1953,7 @@ void rmrf(char* dir) {
     }
 }
 
+//from sync.c
 void sync_cleandb(char* db_dir) {
     DIR* __dirp = opendir(db_dir);
 
@@ -1927,6 +2027,7 @@ void sync_cleandb(char* db_dir) {
     }
 }
 
+//from sync.c
 void sync_cleandb_all() {
     char buf[4104];
 
@@ -1942,6 +2043,7 @@ void sync_cleandb_all() {
     }
 }
 
+//pacman_sync from pacman.c
 void p_sync(alpm_list_t* pm_targets) {
     if (*(short *)(config + 0x58) == 0) {
         alpm_list_t* syncdb = alpm_option_get_syncdbs();
@@ -1986,6 +2088,7 @@ void p_sync(alpm_list_t* pm_targets) {
     return;
 }
 
+//from testpkg.c
 int main(int argc, char** argv) {
     // Set up signals
     struct sigaction new_action, old_action; 
@@ -2018,7 +2121,7 @@ int main(int argc, char** argv) {
     char buffer[100];
     snprintf(buffer, 100, "pkgmis/%s (%s %s) libalpm/%s", "3.5.4", buf, buf.machine, alpm_version());
     setenv("HTTP_USER_AGENT", buffer, 0);
-    config = config_new();
+    config_new();
 
     if (alpm_initialize() == -1) {
         pm_printf(gettext("Error: Necessary libraries could not be initialized\n"));

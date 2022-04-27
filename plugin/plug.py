@@ -17,7 +17,7 @@ for file in files:
     link = 'https://bazaar.abuse.ch/sample/' + check + '/'
 
     #open up abuse.ch
-    bazaar = Bazaar("myapikey")
+    bazaar = Bazaar("myapikey") #This will not run in its current state because a unique API key is required.
     status = bazaar.query_hash(check)
 
     #write the results.
@@ -27,7 +27,5 @@ for file in files:
 
         if status != NULL or status != "":
             f.write("link: " + link)
-
+            subprocess("xdg-open " + link)
         f.close()
- 
-#now figure out how to add the link to the analysis to the top of the file in ghidra!

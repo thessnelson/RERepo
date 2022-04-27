@@ -89,6 +89,21 @@ struct pacman_progress_bar
 	bool completed;	  /* transfer is completed */
 };
 
+// for config_T include didn't work?
+typedef struct {
+	FILE *file;  
+} config_t;
+
+config_t* nm_config_open(const char *fn);
+
+void nm_config_close(config_t *c);
+
+const char *nm_config_get(config_t *c, const char*entry, const char* def);
+
+int nm_config_get_int(config_t *c, const char*entry, int def);
+
+int nm_config_get_bool(config_t *c, const char*entry, int def);
+
 // From config.c
 config_t *config = NULL;
 

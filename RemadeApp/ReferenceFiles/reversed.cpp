@@ -11,8 +11,6 @@
 #include <getopt.h>
 
 /*
-
-
 Functions to potentially improve:
 -handler(). EXCLUSIVE TO THIS VERSION.
 -parsearg_op(). Reference pacman.c

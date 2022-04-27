@@ -23,6 +23,7 @@ Common errors I'm seeing:
 "invalid conversion from char to const char"- in main
 "too few arguments for alpm_option_set_logfile"
 "too few arguments for rmrf()"
+"ISO C++ forbids converting a string constant to char*"
 */
 
 /*

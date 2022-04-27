@@ -19,7 +19,7 @@
 #include <support/xunistd.h> //xwrite
 #include <support/check.h>
 
-#inlcude <sys/stat.h> //lstat
+#include <sys/stat.h> //lstat
 #include <sys/utsname.h>
 #include <getopt.h>
 

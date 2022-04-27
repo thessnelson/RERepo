@@ -1,27 +1,51 @@
 //I'm gonna start using this one, not main.c
 #include "alpm.h"
 #include "alpm_list.h"
-
+#if defined(GIT_VERSION)
+#undef PACKAGE_VERSION
+#define PACKAGE_VERSION GIT_VERSION
+#endif
+// Libraries
+// From pacman.c
+#include <stdlib.h> /* atoi */
 #include <stdio.h>
-#include <signal.h>
-#include <stdarg.h>
-#include <time.h>
-#include <sys/ioctl.h>
-#include <cstring>
-#include <ctime>
-#include <string.h> //str
-#include <libintl.h> //gettext
-#include <dirent.h> // closedir, rewindir
-#include <sys/types.h> //closedir
-#include <cwchar> //wcscpy()
-#include <clocale>
-#include <termios.h> //tcflush
-#include <support/xunistd.h> //xwrite
-#include <support/check.h>
-
-#include <sys/stat.h> //lstat
-#include <sys/utsname.h>
+#include <ctype.h> /* isspace */
+#include <limits.h>
 #include <getopt.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/utsname.h> /* uname */
+#include <locale.h>		 /* setlocale */
+#include <errno.h>
+// From callback.c
+#include <sys/time.h> /* gettimeofday */
+#include <time.h>
+#include <wchar.h>
+// Nothing new from check.c
+// From conf.c
+#include <locale.h> /* setlocale */
+#include <fcntl.h>	/* open */
+#include <glob.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <stdbool.h>
+// Nothing new from package.c
+// From query.c
+#include <stdint.h>
+// From sync.c
+#include <dirent.h>
+#include <fnmatch.h>
+// From testpkg.c
+#include <stdarg.h>
+// Nothing new from util-common.c
+// From util.c
+#include <sys/ioctl.h>
+#include <termios.h>
+#include <wctype.h>
+//from reversing.c
+#include <libintl.h> //for gettext
 
 /*
 Common errors I'm seeing:
@@ -192,18 +216,18 @@ void handler(int input) {
     //if we try to write in a place we shouldnt.
     if (input == 0xb) {
         strlen("Error: Segmentation fault!\n");
-        xwrite(); //EXTERNAL GNU LIBRARY- writes to data blocks
+        write(); //EXTERNAL GNU LIBRARY- writes to data blocks
 
         exit(0xb); // terminates calling process
     } if (input == 2) {
         strlen("\nInterrupt signal received.\n");
-        xwrite();
+        write();
         
         // if we don't flag the transaction to interrupt, we keep moving.
         if (alpm_trans_interrupt() == 0) {
             return;
         }
-        xwrite();
+        write();
     }
 
     exit(input); //Once we're done, get out!
@@ -2197,7 +2221,7 @@ void p_sync(alpm_list_t* pm_targets) {
     } else {
         pmtransflag_t* flags;
 
-        if (trans_init(*flags) != -1) {
+        if (trans_init(*flags) != -1) { //cannot be used as a function.
             sync_cleancache(*(short*)(config + 0x58));
             putchar(10);
             sync_cleandb_all();
@@ -2235,8 +2259,8 @@ int main(int argc, char** argv) {
     // alpm setup
     struct utsname buf;
 
-    localize();
-    uname(buf);
+    //localize();
+    //utsname(buf);
 
     char buffer[100];
     snprintf(buffer, 100, "pkgmis/%s (%s %s) libalpm/%s", "3.5.4", buf, buf.machine, alpm_version());
@@ -2248,9 +2272,9 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    alpm_option_set_root('/');
+    alpm_option_set_root('/'); //invalid conversion
     alpm_option_set_dbpath("/opt/pkgmis/var/lib/pkgmis/");
-    alpm_option_set_logfile();
+    alpm_option_set_logfile(); //Too few arguments
 
     parseargs(argc, argv);
 
@@ -2309,7 +2333,7 @@ int main(int argc, char** argv) {
     }
 
     // Root access commands
-    parseconfig(); //We need to input something here!
+    parseconfig(); //We need to put a file argument here
     needs_root();
 
     if (*config == 4) {

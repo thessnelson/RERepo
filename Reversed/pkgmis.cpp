@@ -253,10 +253,10 @@ void parseargs(int argc, char** argv) {
     }
 }
 
-void config_new() {
+int* config_new() {
     char *conf_path;
     
-    config = (int *)calloc(1, 0x98);
+    int* config = (int *)calloc(1, 0x98);
 
     if (config == NULL) {
         pm_fprintf(gettext("malloc failure: could not allocate %zd bytes\n"));
@@ -267,7 +267,7 @@ void config_new() {
         *(char **)(config + 0x10) = conf_path;
     }
 
-    return;
+    return config;
 }
 
 void needs_root() {
@@ -1841,7 +1841,7 @@ void rmrf(char* dir) {
                             rmrf(err_loc);
                         }
                     }
-                    
+
                     dr = readdir(__dirp);
                 }
 
@@ -2018,7 +2018,7 @@ int main(int argc, char** argv) {
     char buffer[100];
     snprintf(buffer, 100, "pkgmis/%s (%s %s) libalpm/%s", "3.5.4", buf, buf.machine, alpm_version());
     setenv("HTTP_USER_AGENT", buffer, 0);
-    config_new();
+    config = config_new();
 
     if (alpm_initialize() == -1) {
         pm_printf(gettext("Error: Necessary libraries could not be initialized\n"));

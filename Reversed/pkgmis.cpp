@@ -17,6 +17,8 @@ int prevpercent;
 int on_progress;
 alpm_list_t* output;
 timeval* last_time;
+int init;
+
 
 // Helper functions
 void pm_vfprintf(const char* template) {
@@ -779,7 +781,7 @@ char* mdirname(char* input) {
     }
     return output;
 }
-sync_clea
+
 char* resolve_path(char* input) {
     char* __resolved = (char *)calloc(0x1001,1);
 
@@ -1986,6 +1988,441 @@ void p_sync(alpm_list_t* pm_targets) {
     return;
 }
 
+void setrepeatingoption(char* input, void (*func)(char*)) {
+    char *next;
+    char *curr;
+
+    curr = input;
+    while( true ) {
+        next = strchr(curr,0x20);
+
+        if (next == (char *)0x0) break;
+
+        *next = '\0';
+        func(curr);
+        curr = next + 1;
+    }
+
+    func(curr);
+    return;
+}
+
+void setarch() {
+    struct utsname buf;
+    uname(&buf);
+
+    alpm_option_set_arch(buf.machine);
+}
+
+void option_add_holdpkg(char* input) {
+    char *dup;
+    alpm_list_t* list;
+    int* temp;
+
+    dup = strdup(input);
+    temp = config;
+
+    list = alpm_list_add(*(alpm_list_t*)(config + 0x80), dup);
+    *(alpm_list_t*)(temp + 0x80) = list;
+    return;
+}
+
+void option_add_syncfirst(char* input) {
+    char *dup;
+    alpm_list_t* list;
+    int* temp;
+
+    dup = strdup(input);
+    temp = config;
+
+    list = alpm_list_add(*(alpm_list_t*)(config + 0x88),dup);
+    *(alpm_list_t*)(temp + 0x88) = list;
+
+    return;
+}
+
+void get_filename(char* path) {
+    return strchr(path, '/');
+}
+
+char* get_destfile(char* path, char* p) {
+    int len = strlen(path) + strlen(p) + 1;
+    char* buf = (char*)calloc(len, 1);
+
+    snprintf(buf, len, "%s%s", path, p);
+    return buf;
+}
+
+char* get_tempfile(char* path, char* p) {
+    int len = strlen(path) + strlen(p) + 6;
+    char* buf = (char*)calloc(len, 1);
+
+    snprintf(buf, len, "%s%s.part", path, p);
+    return buf;
+}
+
+int strreplace(char* c1, char* c2, char* c3) {
+    size_t c2len;
+    size_t __n;
+    size_t c1len;
+    long list_count;
+    char *list_data;
+    char *c3;
+    char *c2;
+    char *c1;
+    char *temp;
+    char *i;
+    char *buf;
+    long j;
+    long list;
+
+    list = 0;
+    c2len = strlen(c2);
+    __n = strlen(c3);
+
+    if (c1 != (char *)0x0) {
+        for (i = strstr(c1,c2); i != (char *)0x0; i = strstr(i + c2len,c2)) {
+            list = alpm_list_add(list,i);
+        }
+
+        if (list == 0) {
+            strdup(c1);
+        } else {
+            c1len = strlen(c1);
+            list_count = alpm_list_count(list);
+            buf = (char *)malloc(list_count * (__n - c2len) + c1len + 1);
+
+            if (buf != (char *)0x0) {
+                *buf = '\0';
+                temp = c1;
+
+                for (j = list; j != 0; j = alpm_list_next(j)) {
+                    list_data = (char *)alpm_list_getdata(j);
+
+                    if (temp < list_data) {
+                        strncpy(buf,temp,(long)list_data - (long)temp);
+                        buf = buf + ((long)list_data - (long)temp);
+                    }
+
+                    strncpy(buf,c3,__n);
+                    buf = buf + __n;
+                    temp = list_data + c2len;
+                }
+
+                if (*temp != '\0') {
+                    strcpy(buf,temp);
+                    c2len = strlen(temp);
+                    buf = buf + c2len;
+                }
+
+                *buf = '\0';
+            }
+        }
+    }
+
+    return;
+}
+
+int download_transfer(char* path, int c) {
+    FILE* file1, file2;
+    struct stat restrict;
+    int l;
+    char* __command;
+    int output;
+
+    if ((*(long *)(config + 0x90) != 0) && (get_filename(path) != 0)) {
+        get_destfile(path, "");
+        get_tempfile(path, "");
+
+        if ((c != 0) && (l = stat(file2, &restrict), l == 0)) {
+            unlink(file2);
+        }
+
+        if ((c != 0) && (l = stat(file1,&restrict), l == 0)) {
+            unlink(file1);
+        }
+
+        char* dup = strdup(*(char **)(config + 0x90));
+        dup = strstr(dup, "%o");
+
+        if (dup != (char *)0x0) {
+            strreplace(dup, "%o", "");
+        }
+
+        strreplace(dup, "%u", "");
+
+        char* cwd = getcwd(buf, 0x1000);
+
+        if (cwd == (char *)0x0) {
+            pm_printf(gettext("Error: Could not save the current working directory.\n"));
+        }
+        
+        l = chdir(path);
+
+        if (l == 0) {
+            l = system(__command);
+
+            if (l == -1) {
+                pm_printf(gettext("Warning: fork failed on transfer command.\n"));
+                output = -1;
+            } else if (l == 0) {
+                if (dup != (char *)0x0) {
+                    rename(file2, file1);
+                }
+
+                output = 0;
+            } else {
+                output = -1;
+            }
+        } else {
+            pm_printf(gettext("Warning: chdir unsuccessful on the following directory: %s\n."));
+            output = -1;
+        }
+
+        if ((cwd != (char *)0x0) && ((l = chdir(buf)) != 0)) {
+            int* errloc = __errno_location();
+            strerror(*errloc);
+
+            pm_printf(gettext("Error: Directory could not be changed to %s (%s)\n"));
+        }
+
+        if (output == -1) {
+            sleep(2);
+        }
+    }
+
+    return output;
+}
+
+int _parse_option(char* p1, char* p2) {
+    int holdpkg_match;
+    char* arch;
+    char *p1dup;
+
+    if (p1 != (char *)0x0) {
+        holdpkg_match = strcmp(p2, "HoldPkg");
+
+        if (holdpkg_match == 0) {
+            setrepeatingoption("Holdpkg", option_add_holdpkg);
+        } else {
+            holdpkg_match = strcmp(p2, "SyncFirst");
+
+            if (holdpkg_match == 0) {
+                setrepeatingoption("SyncFirst", option_add_syncfirst);
+            } else {
+                holdpkg_match = strcmp(p2, "Architecture");
+
+                if (holdpkg_match == 0) {
+                    arch = alpm_option_get_arch();
+
+                    if (arch == 0) {
+                        setarch();
+                    }
+                } else {
+                    holdpkg_match = strcmp(p2, "XferCommand");
+                    arch = config;
+
+                    if (holdpkg_match == 0) {
+                        p1dup = strdup(p1);
+                        *(char **)(arch + 0x90) = p1dup;
+                        alpm_option_set_fetchcb(download_transfer);
+                    }
+                }
+            }
+        }
+    }
+
+    return holdpkg_match;
+}
+
+int _add_mirror(pmdb_t* db) {
+    char *__haystack;
+    char *haystack_arch;
+    char *temp;
+
+    strreplace(alpm_db_get_name(db), "$repo", "");
+
+    const char* arch = alpm_option_get_arch();
+
+    if (arch == 0) {
+        haystack_arch = strstr(__haystack, "$arch");
+        temp = __haystack;
+
+        if (haystack_arch != (char *)0x0) {
+            return;
+        }
+    } else {
+        temp = strreplace(alpm_db_get_name(db), "$arch", "");
+    }
+
+    alpm_db_setserver(db, temp);
+    return;
+}
+
+void setlibpaths() {
+    int set_root_output;
+    undefined8 root;
+    char *buf_dup;
+    long in_FS_OFFSET;
+    char buf [4104];
+    long local_20;
+    long c_temp;
+
+    if (init == 0) {
+        if (*(long *)(config + 0x28) != 0) {
+            set_root_output = alpm_option_set_root();
+
+            if (set_root_output != 0) {
+                exit(set_root_output);
+            }
+
+            if (*(long *)(config + 0x30) == 0) {
+                root = alpm_option_get_root();
+                snprintf(buf, 0x1000, "%s%s", root, "opt/pkgmis/var/lib/pkgmis/");
+
+                c_temp = config;
+                buf_dup = strdup(buf);
+                *(char **)(c_temp + 0x30) = buf_dup;
+            }
+
+            if (*(long *)(config + 0x38) == 0) {
+                root = alpm_option_get_root();
+                snprintf(buf,0x1000,"%s%s",root,"opt/pkgmis/var/log/pkgmis.log");
+
+                c_temp = config;
+                buf_dup = strdup(buf);
+                *(char **)(c_temp + 0x38) = buf_dup;
+            }
+        }
+
+        if (*(long *)(config + 0x30) != 0) {
+            set_root_output = alpm_option_set_dbpath();
+
+            if (set_root_output != 0) {
+                exit(set_root_output);
+            }
+        }
+
+        if (*(long *)(config + 0x38) != 0) {
+            set_root_output = alpm_option_set_logfile();
+
+            if (set_root_output != 0) {
+                exit(set_root_output);
+            }
+        }
+
+        c_temp = alpm_option_get_cachedirs();
+
+        if (c_temp == 0) {
+            alpm_option_add_cachedir("/opt/pkgmis/var/cache/pkgmis/pkg/");
+        }
+        
+        init = 1;
+    }
+}
+
+int _parseconfig(char* input_conf, int* conf, char* in_param) {
+    int options_match;
+    size_t temp_char_len;
+    char *conf_buf;
+    char *temp_buf2;
+    char *temp;
+    pmdb_t* i;
+    FILE *f;
+    char *next;
+    char* temp_buf1;
+    char temp_char;
+    char acStack4119 [4103];
+
+    pm_printf(gettext("TODO needed to add more print statements in here to describe errors but ran out of time.\n "));
+
+    f = (FILE *)0x0;
+    temp = (char *)0x0;
+    i = 0;
+
+    f = fopen(input_conf,"r");
+
+    if (f == (FILE *)0x0) {
+        pm_printf(gettext("Error: Program configuration file could not be read.\n"));
+    } else {
+        if (conf != (char *)0x0) {
+            temp = strdup(conf);
+        }
+
+        if (in_param != 0) {
+            i = in_param;
+        }
+
+LAB_00106736:
+        do {
+            do {
+                conf_buf = fgets(&temp_char, 0x1000, f);
+
+                if (conf_buf == (char *)0x0) goto LAB_0010675b;
+
+                strtrim(conf_buf);
+            } while ((temp_char == '\0') || (temp_char == '#'));
+
+            next = strchr(&temp_char, '#');
+            if (next != (char *)0x0) {
+                *next = '\0';
+            }
+
+            if ((temp_char != '[') || (temp_char_len = strlen(&temp_char), *(char *)((long)&temp_buf1 + temp_char_len + 7) != ']')) {
+                temp_buf1 = &temp_char;
+                temp_buf2 = &temp_char;
+
+                strtrim(strtrim(strsep(&temp_buf2, "=")));
+
+                if (temp_buf1 == (char *)0x0) {
+                    gettext("Error: Configuration file %s, line %d: missing key!\n");
+                    pm_printf();
+                    break;
+                }
+
+                if (temp == (char *)0x0) break;
+
+                options_match = strcmp(temp,"options");
+
+                if (options_match == 0) {
+                    options_match = _parse_options(input_conf, in_param);
+                } else {
+                    options_match = strcmp(temp_buf1, "Server");
+
+                    if (options_match != 0) goto LAB_00106736;
+
+                    if (temp_buf2 == (char *)0x0) break;
+
+                    options_match = _add_mirror();
+                }
+
+                if (options_match != 0) break;
+                goto LAB_00106736;
+            }
+
+            next = acStack4119;
+            temp = strdup(next);
+            temp_char_len = strlen(temp);
+            temp[temp_char_len - 1] = '\0';
+
+            if (*temp == '\0') {
+                gettext("Error: Configuration file %s, line %d: invalid or unknown section name.\n");
+                pm_printf();
+                break;
+            }
+
+            options_match = strcmp(temp,"options");
+        } while ((options_match == 0) || (i = alpm_db_register_sync(temp), i != 0));
+        
+LAB_0010675b:
+        pm_printf(setlibpaths());
+    }
+}
+
+int parseconfig(int* config) {
+    return _parseconfig(config, 0, 0);
+}
+
 int main(int argc, char** argv) {
     // Set up signals
     struct sigaction new_action, old_action; 
@@ -2086,7 +2523,11 @@ int main(int argc, char** argv) {
     }
 
     // Root access commands
-    parseconfig();
+    int conf_output;
+    if((conf_output = parseconfig(config + 0x20)) != 0) {
+        exit(conf_output);
+    }
+
     needs_root();
 
     if (*config == 4) {

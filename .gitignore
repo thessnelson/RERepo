@@ -1,2 +1,5 @@
 #ignore the original Ghidra-Rizin Package
 ghidra-rizin
+
+pacmanRev.gpr
+pacmanRev.rep
